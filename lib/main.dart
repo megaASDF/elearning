@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/router/app_router.dart';
@@ -9,8 +10,10 @@ import 'core/services/database_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize local database
-  await DatabaseService.instance.database;
+  // Initialize local database only on non-web platforms
+  if (!kIsWeb) {
+    await DatabaseService.instance.database;
+  }
   
   runApp(const MyApp());
 }
