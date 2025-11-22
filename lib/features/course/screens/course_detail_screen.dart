@@ -70,7 +70,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
               expandedHeight: 200,
               pinned: true,
               flexibleSpace: FlexibleSpaceBar(
-                title: Text(_course!.code),
+                titlePadding: const EdgeInsets.only(left: 56, bottom: 16),
+                title: Text(
+                  _course!.code,
+                  style: TextStyle(
+                    color: innerBoxIsScrolled ? Colors.white : Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 background: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -86,16 +94,17 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 80, 16, 16),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        const SizedBox(height: 60),
                         Text(
                           _course!.name,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 18,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -107,6 +116,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                             fontSize: 14,
                           ),
                         ),
+                        const SizedBox(height: 50),
                       ],
                     ),
                   ),

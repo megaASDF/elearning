@@ -6,6 +6,7 @@ import '../../../core/providers/semester_provider.dart';
 import '../../../core/providers/course_provider.dart';
 import '../widgets/dashboard_card.dart';
 import '../widgets/semester_selector.dart';
+import '../../management/screens/manage_semesters_screen.dart';
 
 class InstructorDashboardScreen extends StatefulWidget {
   const InstructorDashboardScreen({super.key});
@@ -23,9 +24,11 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     final semesterProvider = context.read<SemesterProvider>();
     await semesterProvider.loadSemesters();
 
+    if (!mounted) return;
     if (semesterProvider.currentSemester != null) {
       final courseProvider = context.read<CourseProvider>();
       await courseProvider.loadCourses(semesterProvider.currentSemester!.id);
@@ -57,10 +60,45 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                 await courseProvider.loadCourses(semester.id);
               },
             ),
+          PopupMenuButton(
+            icon: const Icon(Icons.settings),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'semesters',
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today),
+                    SizedBox(width: 8),
+                    Text('Manage Semesters'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'students',
+                child: Row(
+                  children: [
+                    Icon(Icons.people),
+                    SizedBox(width: 8),
+                    Text('Manage Students'),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              if (value == 'semesters') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ManageSemestersScreen(),
+                  ),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
-              // TODO: Navigate to profile
+              // Navigate to profile
             },
           ),
           IconButton(
@@ -114,7 +152,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                           icon: Icons.people,
                           color: Colors.orange,
                         ),
-                        DashboardCard(
+                        const DashboardCard(
                           title: 'Assignments',
                           value: '0',
                           icon: Icons.assignment,
@@ -177,11 +215,11 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                               trailing: IconButton(
                                 icon: const Icon(Icons.more_vert),
                                 onPressed: () {
-                                  // TODO: Show options
+                                  // Show options
                                 },
                               ),
                               onTap: () {
-                                // TODO: Navigate to course details
+                                context.push('/course/${course.id}');
                               },
                             ),
                           );

@@ -20,7 +20,6 @@ class ApiService {
 
   // Auth
   Future<Map<String, dynamic>> login(String username, String password) async {
-    // Mock login for demo - replace with actual API call
     if (username == 'admin' && password == 'admin') {
       return {
         'token': 'mock_token_admin',
@@ -35,7 +34,6 @@ class ApiService {
       };
     }
     
-    // Mock student login
     return {
       'token': 'mock_token_student',
       'user': {
@@ -49,8 +47,8 @@ class ApiService {
     };
   }
 
+  // Semesters
   Future<List<dynamic>> getSemesters() async {
-    // Mock data - replace with actual API call
     return [
       {
         'id': '1',
@@ -71,8 +69,25 @@ class ApiService {
     ];
   }
 
+  Future<Map<String, dynamic>> createSemester(Map<String, dynamic> data) async {
+    // Mock response
+    return {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'isCurrent': false,
+    };
+  }
+
+  Future<Map<String, dynamic>> updateSemester(String id, Map<String, dynamic> data) async {
+    return {'id': id, ...data};
+  }
+
+  Future<void> deleteSemester(String id) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  // Courses
   Future<List<dynamic>> getCourses(String semesterId) async {
-    // Mock data - replace with actual API call
     return [
       {
         'id': '1',
@@ -114,7 +129,6 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getCourseDetails(String courseId) async {
-    // Mock data
     return {
       'id': courseId,
       'semesterId': '1',
@@ -129,8 +143,147 @@ class ApiService {
     };
   }
 
+  Future<Map<String, dynamic>> createCourse(Map<String, dynamic> data) async {
+    return {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'instructorName': 'Administrator',
+      'createdAt': DateTime.now().toIso8601String(),
+      'groupCount': 0,
+      'studentCount': 0,
+    };
+  }
+
+  Future<Map<String, dynamic>> updateCourse(String id, Map<String, dynamic> data) async {
+    return {'id': id, ...data};
+  }
+
+  Future<void> deleteCourse(String id) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  // Groups
+  Future<List<dynamic>> getGroups(String courseId) async {
+    return [
+      {
+        'id': '1',
+        'courseId': courseId,
+        'name': 'Group 1',
+        'studentCount': 15,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+      {
+        'id': '2',
+        'courseId': courseId,
+        'name': 'Group 2',
+        'studentCount': 15,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+      {
+        'id': '3',
+        'courseId': courseId,
+        'name': 'Group 3',
+        'studentCount': 15,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+    ];
+  }
+
+  Future<Map<String, dynamic>> createGroup(Map<String, dynamic> data) async {
+    return {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'studentCount': 0,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+  }
+
+  Future<void> deleteGroup(String id) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  // Students
+  Future<List<dynamic>> getStudents(String courseId, {String? groupId}) async {
+    final allStudents = [
+      {
+        'id': '2',
+        'username': 'student1',
+        'displayName': 'Nguyen Van A',
+        'email': 'student1@student.fit.edu',
+        'role': 'student',
+        'groupId': '1',
+        'groupName': 'Group 1',
+      },
+      {
+        'id': '3',
+        'username': 'student2',
+        'displayName': 'Tran Thi B',
+        'email': 'student2@student.fit.edu',
+        'role': 'student',
+        'groupId': '1',
+        'groupName': 'Group 1',
+      },
+      {
+        'id': '4',
+        'username': 'student3',
+        'displayName': 'Le Van C',
+        'email': 'student3@student.fit.edu',
+        'role': 'student',
+        'groupId': '2',
+        'groupName': 'Group 2',
+      },
+    ];
+
+    if (groupId != null) {
+      return allStudents.where((s) => s['groupId'] == groupId).toList();
+    }
+    return allStudents;
+  }
+
+  Future<List<dynamic>> getAllStudents() async {
+    return [
+      {
+        'id': '2',
+        'username': 'student1',
+        'displayName': 'Nguyen Van A',
+        'email': 'student1@student.fit.edu',
+        'role': 'student',
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+      {
+        'id': '3',
+        'username': 'student2',
+        'displayName': 'Tran Thi B',
+        'email': 'student2@student.fit.edu',
+        'role': 'student',
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+      {
+        'id': '4',
+        'username': 'student3',
+        'displayName': 'Le Van C',
+        'email': 'student3@student.fit.edu',
+        'role': 'student',
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+    ];
+  }
+
+  Future<Map<String, dynamic>> createStudent(Map<String, dynamic> data) async {
+    return {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'role': 'student',
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+  }
+
+  Future<void> deleteStudent(String id) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  // Announcements
   Future<List<dynamic>> getAnnouncements(String courseId) async {
-    // Mock data
     return [
       {
         'id': '1',
@@ -169,73 +322,5 @@ class ApiService {
         'viewCount': 15,
       },
     ];
-  }
-
-  Future<List<dynamic>> getGroups(String courseId) async {
-    // Mock data
-    return [
-      {
-        'id': '1',
-        'courseId': courseId,
-        'name': 'Group 1',
-        'studentCount': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '2',
-        'courseId': courseId,
-        'name': 'Group 2',
-        'studentCount': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '3',
-        'courseId': courseId,
-        'name': 'Group 3',
-        'studentCount': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-    ];
-  }
-
-  Future<List<dynamic>> getStudents(String courseId, {String? groupId}) async {
-    // Mock data
-    final allStudents = [
-      {
-        'id': '2',
-        'username': 'student1',
-        'displayName': 'Nguyen Van A',
-        'email': 'student1@student.fit.edu',
-        'role': 'student',
-        'avatarUrl': null,
-        'groupId': '1',
-        'groupName': 'Group 1',
-      },
-      {
-        'id': '3',
-        'username': 'student2',
-        'displayName': 'Tran Thi B',
-        'email': 'student2@student.fit.edu',
-        'role': 'student',
-        'avatarUrl': null,
-        'groupId': '1',
-        'groupName': 'Group 1',
-      },
-      {
-        'id': '4',
-        'username': 'student3',
-        'displayName': 'Le Van C',
-        'email': 'student3@student.fit.edu',
-        'role': 'student',
-        'avatarUrl': null,
-        'groupId': '2',
-        'groupName': 'Group 2',
-      },
-    ];
-
-    if (groupId != null) {
-      return allStudents.where((s) => s['groupId'] == groupId).toList();
-    }
-    return allStudents;
   }
 }
