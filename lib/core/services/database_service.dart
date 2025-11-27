@@ -2,85 +2,98 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseService {
-  static final DatabaseService instance = DatabaseService._init();
+  static final DatabaseService instance = DatabaseService._internal();
   static Database? _database;
 
-  DatabaseService._init();
+  DatabaseService._internal();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('elearning.db');
+    _database = await _initDatabase();
     return _database!;
   }
 
-  Future<Database> _initDB(String filePath) async {
+  Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+    final path = join(dbPath, 'elearning_offline.db');
 
     return await openDatabase(
       path,
-      version: 1,
-      onCreate: _createDB,
+      version: 2, // Updated version
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
-  Future<void> _createDB(Database db, int version) async {
-    // Users table
-    await db.execute('''
-      CREATE TABLE users (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        displayName TEXT NOT NULL,
-        email TEXT NOT NULL,
-        role TEXT NOT NULL,
-        avatarUrl TEXT,
-        createdAt TEXT NOT NULL
-      )
-    ''');
-
-    // Semesters table
-    await db.execute('''
-      CREATE TABLE semesters (
-        id TEXT PRIMARY KEY,
-        code TEXT NOT NULL,
-        name TEXT NOT NULL,
-        startDate TEXT NOT NULL,
-        endDate TEXT NOT NULL,
-        isCurrent INTEGER NOT NULL
-      )
-    ''');
-
+  Future<void> _onCreate(Database db, int version) async {
     // Courses table
     await db.execute('''
-      CREATE TABLE courses (
+      CREATE TABLE courses(
         id TEXT PRIMARY KEY,
-        semesterId TEXT NOT NULL,
-        code TEXT NOT NULL,
-        name TEXT NOT NULL,
+        name TEXT,
+        code TEXT,
         description TEXT,
-        coverImageUrl TEXT,
-        instructorName TEXT NOT NULL,
-        numberOfSessions INTEGER NOT NULL,
-        createdAt TEXT NOT NULL,
-        groupCount INTEGER,
-        studentCount INTEGER
+        instructorName TEXT,
+        data TEXT,
+        lastSync TEXT
       )
     ''');
 
-    // Enrollments table
+    // Assignments table
     await db.execute('''
-      CREATE TABLE enrollments (
+      CREATE TABLE assignments(
         id TEXT PRIMARY KEY,
-        courseId TEXT NOT NULL,
-        studentId TEXT NOT NULL,
-        groupId TEXT NOT NULL,
-        enrolledAt TEXT NOT NULL
+        courseId TEXT,
+        title TEXT,
+        description TEXT,
+        deadline TEXT,
+        data TEXT,
+        lastSync TEXT
+      )
+    ''');
+
+    // Announcements table
+    await db.execute('''
+      CREATE TABLE announcements(
+        id TEXT PRIMARY KEY,
+        courseId TEXT,
+        title TEXT,
+        content TEXT,
+        data TEXT,
+        lastSync TEXT
+      )
+    ''');
+
+    // Materials table
+    await db.execute('''
+      CREATE TABLE materials(
+        id TEXT PRIMARY KEY,
+        courseId TEXT,
+        title TEXT,
+        description TEXT,
+        data TEXT,
+        lastSync TEXT
       )
     ''');
   }
 
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS materials(
+          id TEXT PRIMARY KEY,
+          courseId TEXT,
+          title TEXT,
+          description TEXT,
+          data TEXT,
+          lastSync TEXT
+        )
+      ''');
+    }
+  }
+
   Future<void> close() async {
-    final db = await instance.database;
-    db.close();
+    final db = await database;
+    await db.close();
   }
 }

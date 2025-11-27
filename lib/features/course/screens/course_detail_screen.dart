@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/models/course_model.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../tabs/stream_tab.dart';
 import '../tabs/classwork_tab.dart';
 import '../tabs/people_tab.dart';
@@ -62,6 +64,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       );
     }
 
+    // Get user role from auth provider
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isInstructor = authProvider.user?.role == 'instructor';
+
     return Scaffold(
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) {
@@ -73,8 +79,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                 titlePadding: const EdgeInsets.only(left: 56, bottom: 16),
                 title: Text(
                   _course!.code,
-                  style: TextStyle(
-                    color: innerBoxIsScrolled ? Colors.white : Colors.white,
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
@@ -137,7 +143,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
           controller: _tabController,
           children: [
             StreamTab(courseId: widget.courseId),
-            ClassworkTab(courseId: widget.courseId),
+            ClassworkTab(courseId: widget.courseId, isInstructor: isInstructor),
             PeopleTab(courseId: widget.courseId),
           ],
         ),
