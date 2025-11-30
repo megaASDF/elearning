@@ -13,14 +13,13 @@ class ApiService {
   }
 
   String? _token;
-
+  
   // --- In-Memory Database (Mock) ---
   final List<Map<String, dynamic>> _users = [];
   final List<Map<String, dynamic>> _semesters = [];
   final List<Map<String, dynamic>> _courses = [];
   final List<Map<String, dynamic>> _groups = [];
-  final List<Map<String, dynamic>> _enrollments =
-      []; // Links students to groups
+  final List<Map<String, dynamic>> _enrollments = []; // Links students to groups
   final List<Map<String, dynamic>> _assignments = [];
   final List<Map<String, dynamic>> _submissions = [];
   final List<Map<String, dynamic>> _quizzes = [];
@@ -49,8 +48,7 @@ class ApiService {
       'id': '1',
       'code': 'HK1-2024',
       'name': 'Semester 1, 2024-2025',
-      'startDate':
-          DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
+      'startDate': DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
       'endDate': DateTime.now().add(const Duration(days: 90)).toIso8601String(),
       'isCurrent': true,
     });
@@ -61,7 +59,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> login(String username, String password) async {
     await Future.delayed(const Duration(milliseconds: 500));
-
+    
     // Instructor Login
     if (username == 'admin' && password == 'admin') {
       return {'token': 'admin_token', 'user': _users.first};
@@ -107,9 +105,8 @@ class ApiService {
   Future<void> deleteSemester(String id) async {
     _semesters.removeWhere((s) => s['id'] == id);
   }
-
-  Future<Map<String, dynamic>> updateSemester(
-      String id, Map<String, dynamic> data) async {
+  
+  Future<Map<String, dynamic>> updateSemester(String id, Map<String, dynamic> data) async {
     final index = _semesters.indexWhere((s) => s['id'] == id);
     if (index != -1) {
       _semesters[index] = {..._semesters[index], ...data};
@@ -157,14 +154,13 @@ class ApiService {
       'createdAt': DateTime.now().toIso8601String(),
     };
     _groups.add(group);
-
+    
     // Update course group count
     final courseIndex = _courses.indexWhere((c) => c['id'] == data['courseId']);
     if (courseIndex != -1) {
-      _courses[courseIndex]['groupCount'] =
-          (_courses[courseIndex]['groupCount'] ?? 0) + 1;
+      _courses[courseIndex]['groupCount'] = (_courses[courseIndex]['groupCount'] ?? 0) + 1;
     }
-
+    
     return group;
   }
 
@@ -172,12 +168,10 @@ class ApiService {
   Future<List<dynamic>> getStudents(String courseId, {String? groupId}) async {
     // Return students enrolled in this course/group
     final enrolledStudentIds = _enrollments
-        .where((e) =>
-            e['courseId'] == courseId &&
-            (groupId == null || e['groupId'] == groupId))
+        .where((e) => e['courseId'] == courseId && (groupId == null || e['groupId'] == groupId))
         .map((e) => e['studentId'])
         .toSet();
-
+    
     return _users.where((u) => enrolledStudentIds.contains(u['id'])).toList();
   }
 
@@ -197,8 +191,7 @@ class ApiService {
     return student;
   }
 
-  Future<void> enrollStudent(
-      String studentId, String courseId, String groupId) async {
+  Future<void> enrollStudent(String studentId, String courseId, String groupId) async {
     _enrollments.add({
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'studentId': studentId,
@@ -206,18 +199,16 @@ class ApiService {
       'groupId': groupId,
       'enrolledAt': DateTime.now().toIso8601String(),
     });
-
+    
     // Update counts
     final groupIndex = _groups.indexWhere((g) => g['id'] == groupId);
     if (groupIndex != -1) {
-      _groups[groupIndex]['studentCount'] =
-          (_groups[groupIndex]['studentCount'] ?? 0) + 1;
+      _groups[groupIndex]['studentCount'] = (_groups[groupIndex]['studentCount'] ?? 0) + 1;
     }
-
+    
     final courseIndex = _courses.indexWhere((c) => c['id'] == courseId);
     if (courseIndex != -1) {
-      _courses[courseIndex]['studentCount'] =
-          (_courses[courseIndex]['studentCount'] ?? 0) + 1;
+      _courses[courseIndex]['studentCount'] = (_courses[courseIndex]['studentCount'] ?? 0) + 1;
     }
   }
 
@@ -235,8 +226,7 @@ class ApiService {
     return _assignments.firstWhere((a) => a['id'] == id, orElse: () => {});
   }
 
-  Future<Map<String, dynamic>> createAssignment(
-      Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createAssignment(Map<String, dynamic> data) async {
     final assignment = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
@@ -247,8 +237,7 @@ class ApiService {
     return assignment;
   }
 
-  Future<Map<String, dynamic>> updateAssignment(
-      String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateAssignment(String id, Map<String, dynamic> data) async {
     final index = _assignments.indexWhere((a) => a['id'] == id);
     if (index != -1) {
       _assignments[index] = {..._assignments[index], ...data};
@@ -263,25 +252,16 @@ class ApiService {
 
   // --- Submissions ---
   Future<List<dynamic>> getSubmissions(String assignmentId) async {
-    return _submissions
-        .where((s) => s['assignmentId'] == assignmentId)
-        .toList();
+    return _submissions.where((s) => s['assignmentId'] == assignmentId).toList();
   }
 
-  Future<List<dynamic>> getMySubmissions(
-      String assignmentId, String studentId) async {
-    return _submissions
-        .where((s) =>
-            s['assignmentId'] == assignmentId && s['studentId'] == studentId)
-        .toList();
+  Future<List<dynamic>> getMySubmissions(String assignmentId, String studentId) async {
+    return _submissions.where((s) => s['assignmentId'] == assignmentId && s['studentId'] == studentId).toList();
   }
 
-  Future<Map<String, dynamic>> submitAssignment(
-      String assignmentId, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> submitAssignment(String assignmentId, Map<String, dynamic> data) async {
     // Check for existing submission to increment attempt
-    final existing = _submissions.where((s) =>
-        s['assignmentId'] == assignmentId &&
-        s['studentId'] == data['studentId']);
+    final existing = _submissions.where((s) => s['assignmentId'] == assignmentId && s['studentId'] == data['studentId']);
     final attemptNumber = existing.length + 1;
 
     final submission = {
@@ -297,8 +277,7 @@ class ApiService {
     return submission;
   }
 
-  Future<Map<String, dynamic>> gradeSubmission(
-      String submissionId, double grade, String? feedback) async {
+  Future<Map<String, dynamic>> gradeSubmission(String submissionId, double grade, String? feedback) async {
     final index = _submissions.indexWhere((s) => s['id'] == submissionId);
     if (index != -1) {
       _submissions[index]['grade'] = grade;
@@ -339,8 +318,7 @@ class ApiService {
     return _quizAttempts.where((qa) => qa['quizId'] == quizId).toList();
   }
 
-  Future<Map<String, dynamic>> startQuizAttempt(
-      String quizId, String studentId, String studentName) async {
+  Future<Map<String, dynamic>> startQuizAttempt(String quizId, String studentId, String studentName) async {
     final attempt = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'quizId': quizId,
@@ -355,12 +333,11 @@ class ApiService {
     return attempt;
   }
 
-  Future<Map<String, dynamic>> submitQuizAttempt(
-      String attemptId, Map<String, int> answers) async {
+  Future<Map<String, dynamic>> submitQuizAttempt(String attemptId, Map<String, int> answers) async {
     final index = _quizAttempts.indexWhere((qa) => qa['id'] == attemptId);
     if (index != -1) {
       // Simple Mock Scoring: 10 points per answer
-      final score = (answers.length * 10.0);
+      final score = (answers.length * 10.0); 
       _quizAttempts[index]['answers'] = answers;
       _quizAttempts[index]['submittedAt'] = DateTime.now().toIso8601String();
       _quizAttempts[index]['score'] = score;
@@ -396,8 +373,7 @@ class ApiService {
     return _announcements.where((a) => a['courseId'] == courseId).toList();
   }
 
-  Future<Map<String, dynamic>> createAnnouncement(
-      Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createAnnouncement(Map<String, dynamic> data) async {
     final ann = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
@@ -414,8 +390,7 @@ class ApiService {
     return _forumTopics.where((t) => t['courseId'] == courseId).toList();
   }
 
-  Future<Map<String, dynamic>> createForumTopic(
-      Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createForumTopic(Map<String, dynamic> data) async {
     final topic = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
@@ -432,8 +407,7 @@ class ApiService {
     return _forumReplies.where((r) => r['topicId'] == topicId).toList();
   }
 
-  Future<Map<String, dynamic>> createForumReply(
-      String topicId, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createForumReply(String topicId, Map<String, dynamic> data) async {
     final reply = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'topicId': topicId,
@@ -441,14 +415,13 @@ class ApiService {
       'createdAt': DateTime.now().toIso8601String(),
     };
     _forumReplies.add(reply);
-
+    
     // Update topic reply count
     final topicIndex = _forumTopics.indexWhere((t) => t['id'] == topicId);
     if (topicIndex != -1) {
-      _forumTopics[topicIndex]['replyCount'] =
-          (_forumTopics[topicIndex]['replyCount'] ?? 0) + 1;
+      _forumTopics[topicIndex]['replyCount'] = (_forumTopics[topicIndex]['replyCount'] ?? 0) + 1;
     }
-
+    
     return reply;
   }
 
@@ -461,7 +434,7 @@ class ApiService {
     final index = _notifications.indexWhere((n) => n['id'] == id);
     if (index != -1) _notifications[index]['isRead'] = true;
   }
-
+  
   Future<void> markAllNotificationsAsRead(String userId) async {
     for (var n in _notifications.where((n) => n['userId'] == userId)) {
       n['isRead'] = true;
@@ -475,15 +448,14 @@ class ApiService {
   // --- Messaging ---
   Future<List<dynamic>> getConversations(String userId) async {
     // In a real app this groups messages. Mocking simple list.
-    return _conversations;
+    return _conversations; 
   }
 
   Future<List<dynamic>> getMessages(String userId, String otherUserId) async {
-    return _messages
-        .where((m) =>
-            (m['senderId'] == userId && m['receiverId'] == otherUserId) ||
-            (m['senderId'] == otherUserId && m['receiverId'] == userId))
-        .toList();
+    return _messages.where((m) => 
+      (m['senderId'] == userId && m['receiverId'] == otherUserId) || 
+      (m['senderId'] == otherUserId && m['receiverId'] == userId)
+    ).toList();
   }
 
   Future<Map<String, dynamic>> sendMessage(Map<String, dynamic> data) async {
@@ -499,19 +471,12 @@ class ApiService {
 
   // --- User Profile ---
   Future<Map<String, dynamic>> getUserProfile(String userId) async {
-    return _users.firstWhere((u) => u['id'] == userId,
-        orElse: () => {
-              'id': userId,
-              'username': 'unknown',
-              'displayName': 'Unknown',
-              'email': '',
-              'role': 'student',
-              'createdAt': DateTime.now().toIso8601String()
-            });
+    return _users.firstWhere((u) => u['id'] == userId, orElse: () => {
+      'id': userId, 'username': 'unknown', 'displayName': 'Unknown', 'email': '', 'role': 'student', 'createdAt': DateTime.now().toIso8601String()
+    });
   }
 
-  Future<Map<String, dynamic>> updateUserProfile(
-      String userId, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateUserProfile(String userId, Map<String, dynamic> data) async {
     final index = _users.indexWhere((u) => u['id'] == userId);
     if (index != -1) {
       _users[index] = {..._users[index], ...data};

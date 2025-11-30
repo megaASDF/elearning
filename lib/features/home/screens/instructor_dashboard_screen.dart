@@ -8,6 +8,7 @@ import '../../../core/services/api_service.dart';
 import '../widgets/dashboard_card.dart';
 import '../widgets/semester_selector.dart';
 import '../../management/screens/manage_semesters_screen.dart';
+import '../../management/screens/manage_students_screen.dart'; // Ensure this import exists
 import '../../messaging/screens/conversations_screen.dart';
 import '../../reports/screens/reports_screen.dart';
 
@@ -30,14 +31,14 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    if (! mounted) return;
+    if (!mounted) return;
     final semesterProvider = context.read<SemesterProvider>();
     await semesterProvider.loadSemesters();
 
     if (!mounted) return;
     if (semesterProvider.currentSemester != null) {
       final courseProvider = context.read<CourseProvider>();
-      await courseProvider.loadCourses(semesterProvider. currentSemester!.id);
+      await courseProvider.loadCourses(semesterProvider.currentSemester!.id);
     }
   }
 
@@ -46,8 +47,8 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       final authProvider = context.read<AuthProvider>();
       final apiService = ApiService();
       
-      final conversations = await apiService.getConversations(authProvider.user?. id ?? '');
-      final unreadMessages = conversations.fold<int>(0, (sum, conv) => sum + (conv['unreadCount'] as int?  ?? 0));
+      final conversations = await apiService.getConversations(authProvider.user?.id ?? '');
+      final unreadMessages = conversations.fold<int>(0, (sum, conv) => sum + (conv['unreadCount'] as int? ?? 0));
       
       if (mounted) {
         setState(() {
@@ -59,6 +60,76 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     }
   }
 
+  // --- NEW: Function to Create Course ---
+  Future<void> _createCourseDialog() async {
+    final semesterProvider = context.read<SemesterProvider>();
+    final currentSemester = semesterProvider.currentSemester;
+
+    if (currentSemester == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a semester first')),
+      );
+      return;
+    }
+
+    final codeCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create New Course'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: codeCtrl,
+              decoration: const InputDecoration(labelText: 'Course Code (e.g. INT3123)'),
+            ),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Course Name'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (codeCtrl.text.isNotEmpty && nameCtrl.text.isNotEmpty) {
+                try {
+                  await ApiService().createCourse({
+                    'code': codeCtrl.text,
+                    'name': nameCtrl.text,
+                    'semesterId': currentSemester.id,
+                    'sessions': 15, // Default requirement
+                  });
+                  
+                  if (mounted) {
+                    Navigator.pop(context);
+                    // Refresh the course list
+                    context.read<CourseProvider>().loadCourses(currentSemester.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Course created successfully')),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -67,7 +138,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     final totalCourses = courseProvider.courses.length;
     final totalGroups = courseProvider.courses
-        .fold<int>(0, (sum, course) => sum + (course. groupCount ??  0));
+        .fold<int>(0, (sum, course) => sum + (course.groupCount ?? 0));
     final totalStudents = courseProvider.courses
         .fold<int>(0, (sum, course) => sum + (course.studentCount ?? 0));
 
@@ -77,14 +148,13 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         actions: [
           if (semesterProvider.currentSemester != null)
             SemesterSelector(
-              currentSemester: semesterProvider. currentSemester!,
+              currentSemester: semesterProvider.currentSemester!,
               semesters: semesterProvider.semesters,
               onChanged: (semester) async {
                 semesterProvider.setCurrentSemester(semester);
                 await courseProvider.loadCourses(semester.id);
               },
             ),
-          // Messages Icon
           IconButton(
             icon: Badge(
               label: Text('$_unreadMessageCount'),
@@ -97,7 +167,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                 MaterialPageRoute(
                   builder: (context) => const ConversationsScreen(),
                 ),
-              ). then((_) => _loadUnreadMessageCount());
+              ).then((_) => _loadUnreadMessageCount());
             },
           ),
           PopupMenuButton(
@@ -106,47 +176,31 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
               const PopupMenuItem(
                 value: 'semesters',
                 child: Row(
-                  children: [
-                    Icon(Icons.calendar_today),
-                    SizedBox(width: 8),
-                    Text('Manage Semesters'),
-                  ],
+                  children: [Icon(Icons.calendar_today), SizedBox(width: 8), Text('Manage Semesters')],
                 ),
               ),
               const PopupMenuItem(
                 value: 'students',
                 child: Row(
-                  children: [
-                    Icon(Icons.people),
-                    SizedBox(width: 8),
-                    Text('Manage Students'),
-                  ],
+                  children: [Icon(Icons.people), SizedBox(width: 8), Text('Manage Students')],
                 ),
               ),
               const PopupMenuItem(
                 value: 'reports',
                 child: Row(
-                  children: [
-                    Icon(Icons.bar_chart),
-                    SizedBox(width: 8),
-                    Text('Reports & Export'),
-                  ],
+                  children: [Icon(Icons.bar_chart), SizedBox(width: 8), Text('Reports & Export')],
                 ),
               ),
             ],
             onSelected: (value) {
               if (value == 'semesters') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ManageSemestersScreen(),
-                  ),
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageSemestersScreen()));
+              } else if (value == 'students') {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageStudentsScreen()));
               } else if (value == 'reports') {
-                // Navigate to reports for first course or show course selector
                 if (courseProvider.courses.isNotEmpty) {
                   final firstCourse = courseProvider.courses.first;
-                  Navigator. push(
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => ReportsScreen(
@@ -156,30 +210,24 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                       ),
                     ),
                   );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No courses available for reports')),
-                  );
                 }
               }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              // Navigate to profile
             },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
               await authProvider.logout();
-              if (context.mounted) {
-                context. go('/login');
-              }
+              if (context.mounted) context.go('/login');
             },
           ),
         ],
+      ),
+      // --- NEW: FAB to Create Course ---
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createCourseDialog,
+        icon: const Icon(Icons.add),
+        label: const Text('New Course'),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -187,16 +235,14 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           await _loadUnreadMessageCount();
         },
         child: courseProvider.isLoading
-            ?  const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Overview',
-                      style: Theme. of(context).textTheme. headlineSmall,
-                    ),
+                    // Overview Section
+                    Text('Overview', style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 16),
                     GridView.count(
                       shrinkWrap: true,
@@ -206,104 +252,40 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                       mainAxisSpacing: 16,
                       childAspectRatio: 1.5,
                       children: [
-                        DashboardCard(
-                          title: 'Courses',
-                          value: totalCourses.toString(),
-                          icon: Icons.book,
-                          color: Colors. blue,
-                        ),
-                        DashboardCard(
-                          title: 'Groups',
-                          value: totalGroups. toString(),
-                          icon: Icons.groups,
-                          color: Colors. green,
-                        ),
-                        DashboardCard(
-                          title: 'Students',
-                          value: totalStudents. toString(),
-                          icon: Icons.people,
-                          color: Colors. orange,
-                        ),
-                        DashboardCard(
-                          title: 'Messages',
-                          value: _unreadMessageCount.toString(),
-                          icon: Icons.message,
-                          color: Colors.purple,
-                        ),
+                        DashboardCard(title: 'Courses', value: totalCourses.toString(), icon: Icons.book, color: Colors.blue),
+                        DashboardCard(title: 'Groups', value: totalGroups.toString(), icon: Icons.groups, color: Colors.green),
+                        DashboardCard(title: 'Students', value: totalStudents.toString(), icon: Icons.people, color: Colors.orange),
+                        DashboardCard(title: 'Messages', value: _unreadMessageCount.toString(), icon: Icons.message, color: Colors.purple),
                       ],
                     ),
                     const SizedBox(height: 32),
-                    Row(
-                      children: [
-                        Text(
-                          'Quick Actions',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                      ],
-                    ),
+                    
+                    // Quick Actions
+                    Text('Quick Actions', style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 16),
                     Wrap(
                       spacing: 12,
                       runSpacing: 12,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ManageSemestersScreen(),
-                              ),
-                            );
-                          },
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageSemestersScreen())),
                           icon: const Icon(Icons.calendar_today),
                           label: const Text('Manage Semesters'),
                         ),
                         ElevatedButton.icon(
-                          onPressed: () {
-                            if (courseProvider.courses.isNotEmpty) {
-                              final firstCourse = courseProvider.courses.first;
-                              Navigator. push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ReportsScreen(
-                                    courseId: firstCourse.id,
-                                    courseCode: firstCourse.code,
-                                    courseName: firstCourse.name,
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.bar_chart),
-                          label: const Text('Reports & Export'),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const ConversationsScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.message),
-                          label: const Text('Messages'),
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageStudentsScreen())),
+                          icon: const Icon(Icons.person_add),
+                          label: const Text('Manage Students'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 32),
-                    Text(
-                      'My Courses',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
+
+                    // Course List
+                    Text('My Courses', style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 16),
                     if (courseProvider.courses.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: const EdgeInsets. all(32.0),
-                          child: Text('No courses for this semester'),
-                        ),
-                      )
+                      const Center(child: Padding(padding: EdgeInsets.all(32.0), child: Text('No courses for this semester\nTap "+ New Course" to create one', textAlign: TextAlign.center)))
                     else
                       ListView.builder(
                         shrinkWrap: true,
@@ -315,12 +297,8 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                             margin: const EdgeInsets.only(bottom: 12),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: Colors.primaries[
-                                    course.code.hashCode % Colors.primaries.length],
-                                child: Text(
-                                  course.code.substring(0, 2). toUpperCase(),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                                backgroundColor: Colors.primaries[course.code.hashCode % Colors.primaries.length],
+                                child: Text(course.code.substring(0, 2).toUpperCase(), style: const TextStyle(color: Colors.white)),
                               ),
                               title: Text(course.name),
                               subtitle: Text(course.code),
