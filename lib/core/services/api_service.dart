@@ -1,215 +1,134 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user_model.dart';
 
+// This Service acts as a Mock Backend for the application
 class ApiService {
-  // TODO: Replace with your actual backend URL
-  static const String baseUrl = 'http://localhost:3000/api';
-  
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  ApiService._internal() {
+    _initializeMockData();
+  }
+
   String? _token;
 
-  void setToken(String? token) {
-    _token = token;
+  // --- In-Memory Database (Mock) ---
+  final List<Map<String, dynamic>> _users = [];
+  final List<Map<String, dynamic>> _semesters = [];
+  final List<Map<String, dynamic>> _courses = [];
+  final List<Map<String, dynamic>> _groups = [];
+  final List<Map<String, dynamic>> _enrollments =
+      []; // Links students to groups
+  final List<Map<String, dynamic>> _assignments = [];
+  final List<Map<String, dynamic>> _submissions = [];
+  final List<Map<String, dynamic>> _quizzes = [];
+  final List<Map<String, dynamic>> _quizAttempts = [];
+  final List<Map<String, dynamic>> _materials = [];
+  final List<Map<String, dynamic>> _announcements = [];
+  final List<Map<String, dynamic>> _forumTopics = [];
+  final List<Map<String, dynamic>> _forumReplies = [];
+  final List<Map<String, dynamic>> _notifications = [];
+  final List<Map<String, dynamic>> _conversations = [];
+  final List<Map<String, dynamic>> _messages = [];
+
+  void _initializeMockData() {
+    // Admin
+    _users.add({
+      'id': '1',
+      'username': 'admin',
+      'displayName': 'Administrator',
+      'email': 'admin@fit.edu',
+      'role': 'instructor',
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+
+    // Default Semester
+    _semesters.add({
+      'id': '1',
+      'code': 'HK1-2024',
+      'name': 'Semester 1, 2024-2025',
+      'startDate':
+          DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
+      'endDate': DateTime.now().add(const Duration(days: 90)).toIso8601String(),
+      'isCurrent': true,
+    });
   }
 
-  Future<String?> _getToken() async {
-    if (_token != null) return _token;
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('auth_token');
-    return _token;
-  }
+  // --- Auth ---
+  void setToken(String? token) => _token = token;
 
-  Map<String, String> _getHeaders() {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
-    if (_token != null) {
-      headers['Authorization'] = 'Bearer $_token';
-    }
-    return headers;
-  }
-
-  // Auth
   Future<Map<String, dynamic>> login(String username, String password) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Instructor Login
     if (username == 'admin' && password == 'admin') {
-      return {
-        'token': 'mock_token_admin',
-        'user': {
-          'id': '1',
-          'username': 'admin',
-          'displayName': 'Administrator',
-          'email': 'admin@fit.edu',
-          'role': 'instructor',
-          'createdAt': DateTime.now().toIso8601String(),
-        }
-      };
+      return {'token': 'admin_token', 'user': _users.first};
     }
-    
-    return {
-      'token': 'mock_token_student',
-      'user': {
-        'id': '2',
+
+    // Student Login (Auto-create if not exists for demo)
+    var student = _users.firstWhere(
+      (u) => u['username'] == username && u['role'] == 'student',
+      orElse: () => {},
+    );
+
+    if (student.isEmpty) {
+      // For demo: create student account on fly if simple login
+      student = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
         'username': username,
         'displayName': username,
         'email': '$username@student.fit.edu',
         'role': 'student',
         'createdAt': DateTime.now().toIso8601String(),
-      }
-    };
+      };
+      _users.add(student);
+    }
+
+    return {'token': 'student_token_${student['id']}', 'user': student};
   }
 
-  // Semesters
+  // --- Semesters ---
   Future<List<dynamic>> getSemesters() async {
-    // Mock implementation - replace with real API call
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': '1',
-        'code': 'HK1-2024',
-        'name': 'Semester 1, 2024-2025',
-        'startDate': '2024-09-01T00:00:00.000Z',
-        'endDate': '2025-01-15T00:00:00.000Z',
-        'isCurrent': true,
-      },
-      {
-        'id': '2',
-        'code': 'HK2-2023',
-        'name': 'Semester 2, 2023-2024',
-        'startDate': '2024-02-01T00:00:00.000Z',
-        'endDate': '2024-06-15T00:00:00.000Z',
-        'isCurrent': false,
-      },
-    ];
-    
-    /* Real API implementation:
-    final response = await http.get(
-      Uri.parse('$baseUrl/semesters'),
-      headers: await _getAuthHeaders(),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load semesters');
-    */
+    return List.from(_semesters);
   }
 
   Future<Map<String, dynamic>> createSemester(Map<String, dynamic> data) async {
-    // Mock implementation
-    await Future.delayed(const Duration(milliseconds: 800));
-    return {
+    final newSemester = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
-      'isCurrent': false,
-      'createdAt': DateTime.now().toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
+      'isCurrent': _semesters.isEmpty, // First one is current
     };
-    
-    /* Real API implementation:
-    final response = await http.post(
-      Uri.parse('$baseUrl/semesters'),
-      headers: await _getAuthHeaders(),
-      body: json.encode(data),
-    );
-    if (response.statusCode == 201) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to create semester');
-    */
-  }
-
-  Future<Map<String, dynamic>> updateSemester(String id, Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return {'id': id, ...data};
-    
-    /* Real API implementation:
-    final response = await http.put(
-      Uri.parse('$baseUrl/semesters/$id'),
-      headers: await _getAuthHeaders(),
-      body: json.encode(data),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to update semester');
-    */
+    _semesters.add(newSemester);
+    return newSemester;
   }
 
   Future<void> deleteSemester(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    /* Real API implementation:
-    final response = await http.delete(
-      Uri.parse('$baseUrl/semesters/$id'),
-      headers: await _getAuthHeaders(),
-    );
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Failed to delete semester');
-    }
-    */
+    _semesters.removeWhere((s) => s['id'] == id);
   }
 
-  // Courses
+  Future<Map<String, dynamic>> updateSemester(
+      String id, Map<String, dynamic> data) async {
+    final index = _semesters.indexWhere((s) => s['id'] == id);
+    if (index != -1) {
+      _semesters[index] = {..._semesters[index], ...data};
+      return _semesters[index];
+    }
+    throw Exception('Semester not found');
+  }
+
+  // --- Courses ---
   Future<List<dynamic>> getCourses(String semesterId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': '1',
-        'semesterId': semesterId,
-        'code': 'IT4409',
-        'name': 'Web Programming & Applications',
-        'description': 'Learn modern web development with React, Node.js, and databases',
-        'instructorName': 'Administrator',
-        'numberOfSessions': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-        'groupCount': 3,
-        'studentCount': 45,
-      },
-      {
-        'id': '2',
-        'semesterId': semesterId,
-        'code': 'IT3103',
-        'name': 'Object-Oriented Programming',
-        'description': 'Master OOP concepts with Java',
-        'instructorName': 'Administrator',
-        'numberOfSessions': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-        'groupCount': 2,
-        'studentCount': 30,
-      },
-      {
-        'id': '3',
-        'semesterId': semesterId,
-        'code': 'IT3320',
-        'name': 'Database Systems',
-        'description': 'SQL, NoSQL, and database design principles',
-        'instructorName': 'Administrator',
-        'numberOfSessions': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-        'groupCount': 2,
-        'studentCount': 40,
-      },
-    ];
+    return _courses.where((c) => c['semesterId'] == semesterId).toList();
   }
 
   Future<Map<String, dynamic>> getCourseDetails(String courseId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    return {
-      'id': courseId,
-      'semesterId': '1',
-      'code': 'IT4409',
-      'name': 'Web Programming & Applications',
-      'description': 'Learn modern web development with React, Node.js, and databases',
-      'instructorName': 'Administrator',
-      'numberOfSessions': 15,
-      'createdAt': DateTime.now().toIso8601String(),
-      'groupCount': 3,
-      'studentCount': 45,
-    };
+    return _courses.firstWhere((c) => c['id'] == courseId, orElse: () => {});
   }
 
   Future<Map<String, dynamic>> createCourse(Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    return {
+    final newCourse = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
       'instructorName': 'Administrator',
@@ -217,1035 +136,397 @@ class ApiService {
       'groupCount': 0,
       'studentCount': 0,
     };
-  }
-
-  Future<Map<String, dynamic>> updateCourse(String id, Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return {'id': id, ...data};
+    _courses.add(newCourse);
+    return newCourse;
   }
 
   Future<void> deleteCourse(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    _courses.removeWhere((c) => c['id'] == id);
   }
 
-  // Groups
+  // --- Groups ---
   Future<List<dynamic>> getGroups(String courseId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': '1',
-        'courseId': courseId,
-        'name': 'Group 1',
-        'studentCount': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '2',
-        'courseId': courseId,
-        'name': 'Group 2',
-        'studentCount': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '3',
-        'courseId': courseId,
-        'name': 'Group 3',
-        'studentCount': 15,
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-    ];
+    return _groups.where((g) => g['courseId'] == courseId).toList();
   }
 
   Future<Map<String, dynamic>> createGroup(Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    return {
+    final group = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
       'studentCount': 0,
       'createdAt': DateTime.now().toIso8601String(),
     };
-  }
+    _groups.add(group);
 
-  Future<void> deleteGroup(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-  }
-
-  // Students
-  Future<List<dynamic>> getStudents(String courseId, {String? groupId}) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    final allStudents = [
-      {
-        'id': '2',
-        'username': 'student1',
-        'displayName': 'Nguyen Van A',
-        'email': 'student1@student.fit.edu',
-        'role': 'student',
-        'groupId': '1',
-        'groupName': 'Group 1',
-      },
-      {
-        'id': '3',
-        'username': 'student2',
-        'displayName': 'Tran Thi B',
-        'email': 'student2@student.fit.edu',
-        'role': 'student',
-        'groupId': '1',
-        'groupName': 'Group 1',
-      },
-      {
-        'id': '4',
-        'username': 'student3',
-        'displayName': 'Le Van C',
-        'email': 'student3@student.fit.edu',
-        'role': 'student',
-        'groupId': '2',
-        'groupName': 'Group 2',
-      },
-    ];
-
-    if (groupId != null) {
-      return allStudents.where((s) => s['groupId'] == groupId).toList();
+    // Update course group count
+    final courseIndex = _courses.indexWhere((c) => c['id'] == data['courseId']);
+    if (courseIndex != -1) {
+      _courses[courseIndex]['groupCount'] =
+          (_courses[courseIndex]['groupCount'] ?? 0) + 1;
     }
-    return allStudents;
+
+    return group;
+  }
+
+  // --- Students & Enrollments ---
+  Future<List<dynamic>> getStudents(String courseId, {String? groupId}) async {
+    // Return students enrolled in this course/group
+    final enrolledStudentIds = _enrollments
+        .where((e) =>
+            e['courseId'] == courseId &&
+            (groupId == null || e['groupId'] == groupId))
+        .map((e) => e['studentId'])
+        .toSet();
+
+    return _users.where((u) => enrolledStudentIds.contains(u['id'])).toList();
   }
 
   Future<List<dynamic>> getAllStudents() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': '2',
-        'username': 'student1',
-        'displayName': 'Nguyen Van A',
-        'email': 'student1@student.fit.edu',
-        'role': 'student',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '3',
-        'username': 'student2',
-        'displayName': 'Tran Thi B',
-        'email': 'student2@student.fit.edu',
-        'role': 'student',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '4',
-        'username': 'student3',
-        'displayName': 'Le Van C',
-        'email': 'student3@student.fit.edu',
-        'role': 'student',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-    ];
+    return _users.where((u) => u['role'] == 'student').toList();
   }
 
+  // Mock: Just create a user with student role
   Future<Map<String, dynamic>> createStudent(Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    return {
+    final student = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
       'role': 'student',
       'createdAt': DateTime.now().toIso8601String(),
     };
+    _users.add(student);
+    return student;
+  }
+
+  Future<void> enrollStudent(
+      String studentId, String courseId, String groupId) async {
+    _enrollments.add({
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'studentId': studentId,
+      'courseId': courseId,
+      'groupId': groupId,
+      'enrolledAt': DateTime.now().toIso8601String(),
+    });
+
+    // Update counts
+    final groupIndex = _groups.indexWhere((g) => g['id'] == groupId);
+    if (groupIndex != -1) {
+      _groups[groupIndex]['studentCount'] =
+          (_groups[groupIndex]['studentCount'] ?? 0) + 1;
+    }
+
+    final courseIndex = _courses.indexWhere((c) => c['id'] == courseId);
+    if (courseIndex != -1) {
+      _courses[courseIndex]['studentCount'] =
+          (_courses[courseIndex]['studentCount'] ?? 0) + 1;
+    }
   }
 
   Future<void> deleteStudent(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    _users.removeWhere((u) => u['id'] == id);
+    _enrollments.removeWhere((e) => e['studentId'] == id);
   }
 
-  // Announcements
-  Future<List<dynamic>> getAnnouncements(String courseId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      {
-        'id': '1',
-        'courseId': courseId,
-        'title': 'Welcome to Web Programming Course',
-        'content': 'Welcome everyone! This course will cover modern web development technologies including HTML, CSS, JavaScript, React, Node.js, and MongoDB. Please check the syllabus in the materials section.',
-        'attachmentUrls': [],
-        'groupIds': [],
-        'createdAt': DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
-        'authorName': 'Administrator',
-        'commentCount': 5,
-        'viewCount': 42,
-      },
-      {
-        'id': '2',
-        'courseId': courseId,
-        'title': 'Assignment 1 Released',
-        'content': 'Assignment 1 is now available in the Classwork tab. Please complete it before the deadline. Good luck!',
-        'attachmentUrls': [],
-        'groupIds': ['1', '2'],
-        'createdAt': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
-        'authorName': 'Administrator',
-        'commentCount': 12,
-        'viewCount': 38,
-      },
-      {
-        'id': '3',
-        'courseId': courseId,
-        'title': 'Mid-term Exam Schedule',
-        'content': 'The mid-term exam will be held on Week 8. It will cover all topics from Week 1 to Week 7. Please prepare well.',
-        'attachmentUrls': ['exam_schedule.pdf'],
-        'groupIds': [],
-        'createdAt': DateTime.now().subtract(const Duration(minutes: 30)).toIso8601String(),
-        'authorName': 'Administrator',
-        'commentCount': 3,
-        'viewCount': 15,
-      },
-    ];
-  }
-
-  // ========== BLOCK 4: ASSIGNMENTS & SUBMISSIONS ==========
-  
-  // Assignment endpoints
+  // --- Assignments ---
   Future<List<dynamic>> getAssignments(String courseId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Mock data
-    return [
-      {
-        'id': '1',
-        'courseId': courseId,
-        'groupIds': ['1', '2'],
-        'title': 'HTML & CSS Fundamentals',
-        'description': 'Create a responsive portfolio website using HTML5 and CSS3. The website should include: Home page, About page, Projects gallery, Contact form. Use CSS Grid or Flexbox for layout.',
-        'attachments': ['assignment1_requirements.pdf', 'example_template.zip'],
-        'startDate': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-        'deadline': DateTime.now().add(const Duration(days: 7)).toIso8601String(),
-        'lateDeadline': DateTime.now().add(const Duration(days: 10)).toIso8601String(),
-        'allowLateSubmission': true,
-        'maxAttempts': 3,
-        'allowedFileFormats': ['zip', 'html', 'css'],
-        'maxFileSizeMB': 10.0,
-        'createdAt': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-        'updatedAt': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-      },
-      {
-        'id': '2',
-        'courseId': courseId,
-        'groupIds': ['1', '2', '3'],
-        'title': 'JavaScript DOM Manipulation',
-        'description': 'Build an interactive To-Do List application using vanilla JavaScript. Requirements: Add tasks, Mark as complete, Delete tasks, Filter (all/active/completed), Local storage persistence.',
-        'attachments': ['starter_code.zip'],
-        'startDate': DateTime.now().toIso8601String(),
-        'deadline': DateTime.now().add(const Duration(days: 14)).toIso8601String(),
-        'lateDeadline': null,
-        'allowLateSubmission': false,
-        'maxAttempts': 2,
-        'allowedFileFormats': ['zip', 'html', 'js', 'css'],
-        'maxFileSizeMB': 5.0,
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': '3',
-        'courseId': courseId,
-        'groupIds': ['3'],
-        'title': 'React Component Development',
-        'description': 'Create a weather dashboard using React. Integrate with a weather API and display current conditions, 5-day forecast, and location search functionality.',
-        'attachments': [],
-        'startDate': DateTime.now().add(const Duration(days: 7)).toIso8601String(),
-        'deadline': DateTime.now().add(const Duration(days: 21)).toIso8601String(),
-        'lateDeadline': DateTime.now().add(const Duration(days: 23)).toIso8601String(),
-        'allowLateSubmission': true,
-        'maxAttempts': 1,
-        'allowedFileFormats': ['zip'],
-        'maxFileSizeMB': 20.0,
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-      },
-    ];
-    
-    /* Real API implementation:
-    final response = await http.get(
-      Uri.parse('$baseUrl/assignments?courseId=$courseId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load assignments');
-    */
+    return _assignments.where((a) => a['courseId'] == courseId).toList();
   }
 
-  Future<Map<String, dynamic>> getAssignmentById(String assignmentId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    return {
-      'id': assignmentId,
-      'courseId': '1',
-      'groupIds': ['1', '2'],
-      'title': 'HTML & CSS Fundamentals',
-      'description': 'Create a responsive portfolio website using HTML5 and CSS3. The website should include: Home page, About page, Projects gallery, Contact form. Use CSS Grid or Flexbox for layout.',
-      'attachments': ['assignment1_requirements.pdf', 'example_template.zip'],
-      'startDate': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-      'deadline': DateTime.now().add(const Duration(days: 7)).toIso8601String(),
-      'lateDeadline': DateTime.now().add(const Duration(days: 10)).toIso8601String(),
-      'allowLateSubmission': true,
-      'maxAttempts': 3,
-      'allowedFileFormats': ['zip', 'html', 'css'],
-      'maxFileSizeMB': 10.0,
-      'createdAt': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-      'updatedAt': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-    };
+  Future<Map<String, dynamic>> getAssignmentById(String id) async {
+    return _assignments.firstWhere((a) => a['id'] == id, orElse: () => {});
   }
 
-  Future<Map<String, dynamic>> createAssignment(Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    return {
+  Future<Map<String, dynamic>> createAssignment(
+      Map<String, dynamic> data) async {
+    final assignment = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       ...data,
       'createdAt': DateTime.now().toIso8601String(),
       'updatedAt': DateTime.now().toIso8601String(),
     };
-    
-    /* Real API implementation:
-    final response = await http.post(
-      Uri.parse('$baseUrl/assignments'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-      body: json.encode(data),
-    );
-    if (response.statusCode == 201) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to create assignment');
-    */
+    _assignments.add(assignment);
+    return assignment;
   }
 
-  Future<Map<String, dynamic>> updateAssignment(String id, Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return {
-      'id': id,
-      ...data,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-    
-    /* Real API implementation:
-    final response = await http.put(
-      Uri.parse('$baseUrl/assignments/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-      body: json.encode(data),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
+  Future<Map<String, dynamic>> updateAssignment(
+      String id, Map<String, dynamic> data) async {
+    final index = _assignments.indexWhere((a) => a['id'] == id);
+    if (index != -1) {
+      _assignments[index] = {..._assignments[index], ...data};
+      return _assignments[index];
     }
-    throw Exception('Failed to update assignment');
-    */
+    return {};
   }
 
   Future<void> deleteAssignment(String id) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    /* Real API implementation:
-    final response = await http.delete(
-      Uri.parse('$baseUrl/assignments/$id'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-    );
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Failed to delete assignment');
-    }
-    */
+    _assignments.removeWhere((a) => a['id'] == id);
   }
 
-  // Submission endpoints
+  // --- Submissions ---
   Future<List<dynamic>> getSubmissions(String assignmentId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Mock data
-    return [
-      {
-        'id': '1',
-        'assignmentId': assignmentId,
-        'studentId': '2',
-        'studentName': 'Nguyen Van A',
-        'studentEmail': 'student1@student.fit.edu',
-        'files': ['submission_nguyen_van_a.zip'],
-        'comment': 'Here is my submission. I completed all requirements.',
-        'submittedAt': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
-        'attemptNumber': 1,
-        'isLate': false,
-        'grade': 95.0,
-        'feedback': 'Excellent work! Clean code and great design.',
-        'gradedAt': DateTime.now().subtract(const Duration(hours: 1)).toIso8601String(),
-      },
-      {
-        'id': '2',
-        'assignmentId': assignmentId,
-        'studentId': '3',
-        'studentName': 'Tran Thi B',
-        'studentEmail': 'student2@student.fit.edu',
-        'files': ['tran_thi_b_portfolio.zip'],
-        'comment': 'My portfolio website submission.',
-        'submittedAt': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
-        'attemptNumber': 2,
-        'isLate': false,
-        'grade': null,
-        'feedback': null,
-        'gradedAt': null,
-      },
-      {
-        'id': '3',
-        'assignmentId': assignmentId,
-        'studentId': '4',
-        'studentName': 'Le Van C',
-        'studentEmail': 'student3@student.fit.edu',
-        'files': ['le_van_c_assignment1.zip'],
-        'comment': null,
-        'submittedAt': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
-        'attemptNumber': 1,
-        'isLate': true,
-        'grade': 80.0,
-        'feedback': 'Good effort, but late submission. Some CSS issues.',
-        'gradedAt': DateTime.now().add(const Duration(days: 2)).toIso8601String(),
-      },
-    ];
-    
-    /* Real API implementation:
-    final response = await http.get(
-      Uri.parse('$baseUrl/submissions?assignmentId=$assignmentId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load submissions');
-    */
+    return _submissions
+        .where((s) => s['assignmentId'] == assignmentId)
+        .toList();
   }
 
-  Future<List<dynamic>> getMySubmissions(String assignmentId, String studentId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    final allSubmissions = await getSubmissions(assignmentId);
-    return allSubmissions.where((s) => s['studentId'] == studentId).toList();
+  Future<List<dynamic>> getMySubmissions(
+      String assignmentId, String studentId) async {
+    return _submissions
+        .where((s) =>
+            s['assignmentId'] == assignmentId && s['studentId'] == studentId)
+        .toList();
   }
 
-  Future<Map<String, dynamic>> submitAssignment(String assignmentId, Map<String, dynamic> data) async {
-    await Future.delayed(const Duration(milliseconds: 1000));
-    return {
+  Future<Map<String, dynamic>> submitAssignment(
+      String assignmentId, Map<String, dynamic> data) async {
+    // Check for existing submission to increment attempt
+    final existing = _submissions.where((s) =>
+        s['assignmentId'] == assignmentId &&
+        s['studentId'] == data['studentId']);
+    final attemptNumber = existing.length + 1;
+
+    final submission = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'assignmentId': assignmentId,
       ...data,
+      'attemptNumber': attemptNumber,
       'submittedAt': DateTime.now().toIso8601String(),
       'grade': null,
       'feedback': null,
-      'gradedAt': null,
     };
-    
-    /* Real API implementation:
-    final response = await http.post(
-      Uri.parse('$baseUrl/submissions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-      body: json.encode({...data, 'assignmentId': assignmentId}),
-    );
-    if (response.statusCode == 201) {
-      return json.decode(response.body);
+    _submissions.add(submission);
+    return submission;
+  }
+
+  Future<Map<String, dynamic>> gradeSubmission(
+      String submissionId, double grade, String? feedback) async {
+    final index = _submissions.indexWhere((s) => s['id'] == submissionId);
+    if (index != -1) {
+      _submissions[index]['grade'] = grade;
+      _submissions[index]['feedback'] = feedback;
+      _submissions[index]['gradedAt'] = DateTime.now().toIso8601String();
+      return _submissions[index];
     }
-    throw Exception('Failed to submit assignment');
-    */
+    throw Exception('Submission not found');
   }
 
-  Future<Map<String, dynamic>> gradeSubmission(String submissionId, double grade, String? feedback) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return {
-      'id': submissionId,
-      'grade': grade,
-      'feedback': feedback,
-      'gradedAt': DateTime.now().toIso8601String(),
-    };
-    
-    /* Real API implementation:
-    final response = await http.put(
-      Uri.parse('$baseUrl/submissions/$submissionId/grade'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-      body: json.encode({'grade': grade, 'feedback': feedback}),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to grade submission');
-    */
+  // --- Quizzes ---
+  Future<List<dynamic>> getQuizzes(String courseId) async {
+    return _quizzes.where((q) => q['courseId'] == courseId).toList();
   }
 
-  Future<void> deleteSubmission(String submissionId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    /* Real API implementation:
-    final response = await http.delete(
-      Uri.parse('$baseUrl/submissions/$submissionId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${await _getToken()}',
-      },
-    );
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Failed to delete submission');
-    }
-    */
-  }
-
-  // Helper method to get headers with auth token
-  Future<Map<String, String>> _getAuthHeaders() async {
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${await _getToken()}',
-    };
-  }
-
-
-  // ========== BLOCK 5: QUIZZES & QUESTIONS ==========
-
-// Question Bank endpoints
-Future<List<dynamic>> getQuestions(String courseId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'courseId': courseId,
-      'questionText': 'What does HTML stand for?',
-      'choices': [
-        'Hyper Text Markup Language',
-        'High Tech Modern Language',
-        'Home Tool Markup Language',
-        'Hyperlinks and Text Markup Language'
-      ],
-      'correctAnswerIndex': 0,
-      'difficulty': 'easy',
-      'createdAt': DateTime.now().toIso8601String(),
-    },
-    {
-      'id': '2',
-      'courseId': courseId,
-      'questionText': 'Which CSS property controls text size?',
-      'choices': ['font-size', 'text-size', 'font-style', 'text-style'],
-      'correctAnswerIndex': 0,
-      'difficulty': 'easy',
-      'createdAt': DateTime.now().toIso8601String(),
-    },
-    {
-      'id': '3',
-      'courseId': courseId,
-      'questionText': 'What is the correct way to declare a JavaScript variable?',
-      'choices': ['var name;', 'variable name;', 'v name;', 'declare name;'],
-      'correctAnswerIndex': 0,
-      'difficulty': 'medium',
-      'createdAt': DateTime.now().toIso8601String(),
-    },
-    {
-      'id': '4',
-      'courseId': courseId,
-      'questionText': 'Which HTTP method is used to update a resource?',
-      'choices': ['POST', 'GET', 'PUT', 'DELETE'],
-      'correctAnswerIndex': 2,
-      'difficulty': 'medium',
-      'createdAt': DateTime.now().toIso8601String(),
-    },
-    {
-      'id': '5',
-      'courseId': courseId,
-      'questionText': 'What is a closure in JavaScript?',
-      'choices': [
-        'A function with access to its outer scope',
-        'A way to close the browser',
-        'A type of loop',
-        'A CSS property'
-      ],
-      'correctAnswerIndex': 0,
-      'difficulty': 'hard',
-      'createdAt': DateTime.now().toIso8601String(),
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> createQuestion(Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    ...data,
-    'createdAt': DateTime.now().toIso8601String(),
-  };
-}
-
-Future<Map<String, dynamic>> updateQuestion(String id, Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return {'id': id, ...data};
-}
-
-Future<void> deleteQuestion(String id) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-// Quiz endpoints
-Future<List<dynamic>> getQuizzes(String courseId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'courseId': courseId,
-      'groupIds': ['1', '2'],
-      'title': 'HTML & CSS Basics Quiz',
-      'description': 'Test your knowledge of HTML and CSS fundamentals',
-      'openTime': DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
-      'closeTime': DateTime.now().add(const Duration(days: 5)).toIso8601String(),
-      'durationMinutes': 30,
-      'maxAttempts': 2,
-      'easyQuestions': 5,
-      'mediumQuestions': 3,
-      'hardQuestions': 2,
-      'questionIds': ['1', '2', '3', '4', '5'],
-      'createdAt': DateTime.now().subtract(const Duration(days: 3)).toIso8601String(),
-      'updatedAt': DateTime.now().subtract(const Duration(days: 3)).toIso8601String(),
-    },
-    {
-      'id': '2',
-      'courseId': courseId,
-      'groupIds': ['1', '2', '3'],
-      'title': 'JavaScript Fundamentals',
-      'description': 'Quiz covering JavaScript basics, DOM, and ES6 features',
-      'openTime': DateTime.now().add(const Duration(days: 7)).toIso8601String(),
-      'closeTime': DateTime.now().add(const Duration(days: 14)).toIso8601String(),
-      'durationMinutes': 45,
-      'maxAttempts': 1,
-      'easyQuestions': 3,
-      'mediumQuestions': 5,
-      'hardQuestions': 2,
-      'questionIds': [],
+  Future<Map<String, dynamic>> createQuiz(Map<String, dynamic> data) async {
+    final quiz = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
       'createdAt': DateTime.now().toIso8601String(),
       'updatedAt': DateTime.now().toIso8601String(),
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> createQuiz(Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    ...data,
-    'createdAt': DateTime.now().toIso8601String(),
-    'updatedAt': DateTime.now().toIso8601String(),
-  };
-}
-
-Future<Map<String, dynamic>> updateQuiz(String id, Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return {'id': id, ...data, 'updatedAt': DateTime.now().toIso8601String()};
-}
-
-Future<void> deleteQuiz(String id) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-// Quiz Attempt endpoints
-Future<List<dynamic>> getQuizAttempts(String quizId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'quizId': quizId,
-      'studentId': '2',
-      'studentName': 'Nguyen Van A',
-      'answers': {'1': 0, '2': 0, '3': 0, '4': 2, '5': 0},
-      'score': 100.0,
-      'startedAt': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
-      'submittedAt': DateTime.now().subtract(const Duration(hours: 1, minutes: 30)).toIso8601String(),
-      'attemptNumber': 1,
-    },
-    {
-      'id': '2',
-      'quizId': quizId,
-      'studentId': '3',
-      'studentName': 'Tran Thi B',
-      'answers': {'1': 0, '2': 1, '3': 0, '4': 2, '5': 1},
-      'score': 60.0,
-      'startedAt': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
-      'submittedAt': DateTime.now().subtract(const Duration(hours: 23)).toIso8601String(),
-      'attemptNumber': 1,
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> startQuizAttempt(String quizId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    'quizId': quizId,
-    'startedAt': DateTime.now().toIso8601String(),
-    'attemptNumber': 1,
-  };
-}
-
-Future<Map<String, dynamic>> submitQuizAttempt(String attemptId, Map<String, int> answers) async {
-  await Future.delayed(const Duration(milliseconds: 1000));
-  // Calculate score (mock)
-  final score = (answers.length * 20).toDouble(); // Simple calculation
-  return {
-    'id': attemptId,
-    'answers': answers,
-    'score': score,
-    'submittedAt': DateTime.now().toIso8601String(),
-  };
-}
-
-
-// ========== BLOCK 6: MATERIALS & FORUMS ==========
-
-// Materials endpoints
-Future<List<dynamic>> getMaterials(String courseId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'courseId': courseId,
-      'title': 'Course Syllabus',
-      'description': 'Complete syllabus for the Web Programming course',
-      'fileUrls': ['syllabus_2024.pdf'],
-      'links': [],
-      'createdAt': DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
-      'updatedAt': DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
-      'authorName': 'Administrator',
-      'viewCount': 125,
-      'downloadCount': 98,
-    },
-    {
-      'id': '2',
-      'courseId': courseId,
-      'title': 'HTML5 & CSS3 Guide',
-      'description': 'Comprehensive guide covering HTML5 and CSS3 fundamentals',
-      'fileUrls': ['html5_css3_guide.pdf', 'css_cheatsheet.pdf'],
-      'links': ['https://developer.mozilla.org/en-US/docs/Web/HTML'],
-      'createdAt': DateTime.now().subtract(const Duration(days: 20)).toIso8601String(),
-      'updatedAt': DateTime.now().subtract(const Duration(days: 20)).toIso8601String(),
-      'authorName': 'Administrator',
-      'viewCount': 87,
-      'downloadCount': 65,
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> createMaterial(Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    ...data,
-    'createdAt': DateTime.now().toIso8601String(),
-    'updatedAt': DateTime.now().toIso8601String(),
-    'viewCount': 0,
-    'downloadCount': 0,
-  };
-}
-
-Future<Map<String, dynamic>> updateMaterial(String id, Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return {'id': id, ...data, 'updatedAt': DateTime.now().toIso8601String()};
-}
-
-Future<void> deleteMaterial(String id) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-// Forum endpoints
-Future<List<dynamic>> getForumTopics(String courseId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'courseId': courseId,
-      'title': 'Question about Assignment 1',
-      'content': 'I have a question regarding the CSS Grid layout in Assignment 1. Can someone help?',
-      'authorId': '2',
-      'authorName': 'Nguyen Van A',
-      'attachments': [],
-      'createdAt': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
-      'updatedAt': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
-      'replyCount': 8,
-      'viewCount': 42,
-    },
-    {
-      'id': '2',
-      'courseId': courseId,
-      'title': 'Best resources for learning React?',
-      'content': 'Can anyone recommend good tutorials or documentation for React beginners?',
-      'authorId': '3',
-      'authorName': 'Tran Thi B',
-      'attachments': [],
-      'createdAt': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
-      'updatedAt': DateTime.now().subtract(const Duration(hours: 6)).toIso8601String(),
-      'replyCount': 12,
-      'viewCount': 67,
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> createForumTopic(Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    ...data,
-    'createdAt': DateTime.now().toIso8601String(),
-    'updatedAt': DateTime.now().toIso8601String(),
-    'replyCount': 0,
-    'viewCount': 0,
-  };
-}
-
-Future<List<dynamic>> getForumReplies(String topicId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'topicId': topicId,
-      'content': 'You can use display: grid; on the container and then define grid-template-columns.',
-      'authorId': '1',
-      'authorName': 'Administrator',
-      'attachments': [],
-      'createdAt': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-      'parentReplyId': null,
-    },
-    {
-      'id': '2',
-      'topicId': topicId,
-      'content': 'Thank you! That helps a lot.',
-      'authorId': '2',
-      'authorName': 'Nguyen Van A',
-      'attachments': [],
-      'createdAt': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
-      'parentReplyId': '1',
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> createForumReply(String topicId, Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    'topicId': topicId,
-    ...data,
-    'createdAt': DateTime.now().toIso8601String(),
-  };
-}
-
-Future<void> deleteForumTopic(String id) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-Future<void> deleteForumReply(String id) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-
-// ========== BLOCK 7: NOTIFICATIONS & MESSAGING ==========
-
-// Notifications endpoints
-Future<List<dynamic>> getNotifications(String userId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'userId': userId,
-      'type': 'assignment',
-      'title': 'New Assignment Posted',
-      'message': 'HTML & CSS Fundamentals assignment has been posted. Due in 7 days.',
-      'relatedId': '1',
-      'relatedType': 'assignment',
-      'isRead': false,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
-    },
-    {
-      'id': '2',
-      'userId': userId,
-      'type': 'quiz',
-      'title': 'Quiz Opening Soon',
-      'message': 'JavaScript Fundamentals quiz opens in 24 hours.',
-      'relatedId': '2',
-      'relatedType': 'quiz',
-      'isRead': false,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
-    },
-    {
-      'id': '3',
-      'userId': userId,
-      'type': 'grade',
-      'title': 'Assignment Graded',
-      'message': 'Your HTML & CSS assignment has been graded. Score: 95/100',
-      'relatedId': '1',
-      'relatedType': 'submission',
-      'isRead': true,
-      'createdAt': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
-    },
-    {
-      'id': '4',
-      'userId': userId,
-      'type': 'deadline',
-      'title': 'Assignment Deadline Approaching',
-      'message': 'JavaScript DOM Manipulation assignment is due in 2 days.',
-      'relatedId': '2',
-      'relatedType': 'assignment',
-      'isRead': false,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 8)).toIso8601String(),
-    },
-    {
-      'id': '5',
-      'userId': userId,
-      'type': 'announcement',
-      'title': 'New Course Announcement',
-      'message': 'Mid-term exam schedule has been posted.',
-      'relatedId': '3',
-      'relatedType': 'announcement',
-      'isRead': true,
-      'createdAt': DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
-    },
-  ];
-}
-
-Future<void> markNotificationAsRead(String notificationId) async {
-  await Future.delayed(const Duration(milliseconds: 300));
-}
-
-Future<void> markAllNotificationsAsRead(String userId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-}
-
-Future<void> deleteNotification(String notificationId) async {
-  await Future.delayed(const Duration(milliseconds: 300));
-}
-
-// Messaging endpoints
-Future<List<dynamic>> getConversations(String userId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'otherUserId': '1',
-      'otherUserName': 'Administrator',
-      'lastMessage': 'Thank you for your question. I will review your assignment.',
-      'lastMessageTime': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-      'unreadCount': 2,
-    },
-  ];
-}
-
-Future<List<dynamic>> getMessages(String userId, String otherUserId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return [
-    {
-      'id': '1',
-      'senderId': userId,
-      'senderName': 'Current User',
-      'receiverId': otherUserId,
-      'receiverName': 'Administrator',
-      'content': 'Hello, I have a question about Assignment 1.',
-      'attachments': [],
-      'isRead': true,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
-    },
-    {
-      'id': '2',
-      'senderId': otherUserId,
-      'senderName': 'Administrator',
-      'receiverId': userId,
-      'receiverName': 'Current User',
-      'content': 'Hello! What would you like to know?',
-      'attachments': [],
-      'isRead': true,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
-    },
-    {
-      'id': '3',
-      'senderId': userId,
-      'senderName': 'Current User',
-      'receiverId': otherUserId,
-      'receiverName': 'Administrator',
-      'content': 'Can you clarify the requirements for the CSS Grid section?',
-      'attachments': [],
-      'isRead': true,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
-    },
-    {
-      'id': '4',
-      'senderId': otherUserId,
-      'senderName': 'Administrator',
-      'receiverId': userId,
-      'receiverName': 'Current User',
-      'content': 'Thank you for your question. I will review your assignment.',
-      'attachments': [],
-      'isRead': false,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
-    },
-  ];
-}
-
-Future<Map<String, dynamic>> sendMessage(Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    ...data,
-    'isRead': false,
-    'createdAt': DateTime.now().toIso8601String(),
-  };
-}
-
-Future<void> markMessageAsRead(String messageId) async {
-  await Future.delayed(const Duration(milliseconds: 300));
-}
-
-// ========== BLOCK 9: PROFILE & SETTINGS ==========
-
-Future<Map<String, dynamic>> getUserProfile(String userId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return {
-    'id': userId,
-    'username': userId == '1' ? 'admin' : 'student1',
-    'displayName': userId == '1' ? 'Administrator' : 'Nguyen Van A',
-    'email': userId == '1' ? 'admin@fit.edu' : 'student1@student.fit.edu',
-    'role': userId == '1' ? 'instructor' : 'student',
-    'avatarUrl': null,
-    'phoneNumber': '+84 123 456 789',
-    'bio': userId == '1' 
-        ? 'Senior Lecturer at Faculty of Information Technology' 
-        : 'Third-year student majoring in Computer Science',
-    'department': 'Faculty of Information Technology',
-    'studentId': userId == '1' ?  null : '20210001',
-    'createdAt': DateTime.now().subtract(const Duration(days: 365)).toIso8601String(),
-    'updatedAt': DateTime.now().toIso8601String(),
-  };
-}
-
-Future<Map<String, dynamic>> updateUserProfile(String userId, Map<String, dynamic> data) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  return {
-    'id': userId,
-    ... data,
-    'updatedAt': DateTime.now().toIso8601String(),
-  };
-}
-
-Future<String> uploadAvatar(String userId, String filePath) async {
-  await Future.delayed(const Duration(milliseconds: 1500));
-  // In real implementation, upload to server and return URL
-  return 'https://example.com/avatars/$userId. jpg';
-}
-
-Future<void> changePassword(String userId, String oldPassword, String newPassword) async {
-  await Future.delayed(const Duration(milliseconds: 800));
-  // Validate old password and update new password
-  if (oldPassword != 'admin' && oldPassword != 'password') {
-    throw Exception('Incorrect old password');
+    };
+    _quizzes.add(quiz);
+    return quiz;
   }
-}
+
+  Future<void> updateQuiz(String id, Map<String, dynamic> data) async {
+    final index = _quizzes.indexWhere((q) => q['id'] == id);
+    if (index != -1) _quizzes[index] = {..._quizzes[index], ...data};
+  }
+
+  Future<void> deleteQuiz(String id) async {
+    _quizzes.removeWhere((q) => q['id'] == id);
+  }
+
+  // --- Quiz Attempts ---
+  Future<List<dynamic>> getQuizAttempts(String quizId) async {
+    return _quizAttempts.where((qa) => qa['quizId'] == quizId).toList();
+  }
+
+  Future<Map<String, dynamic>> startQuizAttempt(
+      String quizId, String studentId, String studentName) async {
+    final attempt = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'quizId': quizId,
+      'studentId': studentId,
+      'studentName': studentName,
+      'startedAt': DateTime.now().toIso8601String(),
+      'attemptNumber': 1,
+      'answers': {},
+      'score': 0.0,
+    };
+    _quizAttempts.add(attempt);
+    return attempt;
+  }
+
+  Future<Map<String, dynamic>> submitQuizAttempt(
+      String attemptId, Map<String, int> answers) async {
+    final index = _quizAttempts.indexWhere((qa) => qa['id'] == attemptId);
+    if (index != -1) {
+      // Simple Mock Scoring: 10 points per answer
+      final score = (answers.length * 10.0);
+      _quizAttempts[index]['answers'] = answers;
+      _quizAttempts[index]['submittedAt'] = DateTime.now().toIso8601String();
+      _quizAttempts[index]['score'] = score;
+      return _quizAttempts[index];
+    }
+    throw Exception('Attempt not found');
+  }
+
+  // --- Materials ---
+  Future<List<dynamic>> getMaterials(String courseId) async {
+    return _materials.where((m) => m['courseId'] == courseId).toList();
+  }
+
+  Future<Map<String, dynamic>> createMaterial(Map<String, dynamic> data) async {
+    final material = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'createdAt': DateTime.now().toIso8601String(),
+      'viewCount': 0,
+      'downloadCount': 0,
+    };
+    _materials.add(material);
+    return material;
+  }
+
+  Future<void> updateMaterial(String id, Map<String, dynamic> data) async {
+    final index = _materials.indexWhere((m) => m['id'] == id);
+    if (index != -1) _materials[index] = {..._materials[index], ...data};
+  }
+
+  // --- Announcements ---
+  Future<List<dynamic>> getAnnouncements(String courseId) async {
+    return _announcements.where((a) => a['courseId'] == courseId).toList();
+  }
+
+  Future<Map<String, dynamic>> createAnnouncement(
+      Map<String, dynamic> data) async {
+    final ann = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'createdAt': DateTime.now().toIso8601String(),
+      'viewCount': 0,
+      'commentCount': 0,
+    };
+    _announcements.add(ann);
+    return ann;
+  }
+
+  // --- Forum ---
+  Future<List<dynamic>> getForumTopics(String courseId) async {
+    return _forumTopics.where((t) => t['courseId'] == courseId).toList();
+  }
+
+  Future<Map<String, dynamic>> createForumTopic(
+      Map<String, dynamic> data) async {
+    final topic = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'createdAt': DateTime.now().toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
+      'replyCount': 0,
+      'viewCount': 0,
+    };
+    _forumTopics.add(topic);
+    return topic;
+  }
+
+  Future<List<dynamic>> getForumReplies(String topicId) async {
+    return _forumReplies.where((r) => r['topicId'] == topicId).toList();
+  }
+
+  Future<Map<String, dynamic>> createForumReply(
+      String topicId, Map<String, dynamic> data) async {
+    final reply = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'topicId': topicId,
+      ...data,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    _forumReplies.add(reply);
+
+    // Update topic reply count
+    final topicIndex = _forumTopics.indexWhere((t) => t['id'] == topicId);
+    if (topicIndex != -1) {
+      _forumTopics[topicIndex]['replyCount'] =
+          (_forumTopics[topicIndex]['replyCount'] ?? 0) + 1;
+    }
+
+    return reply;
+  }
+
+  // --- Notifications ---
+  Future<List<dynamic>> getNotifications(String userId) async {
+    return _notifications.where((n) => n['userId'] == userId).toList();
+  }
+
+  Future<void> markNotificationAsRead(String id) async {
+    final index = _notifications.indexWhere((n) => n['id'] == id);
+    if (index != -1) _notifications[index]['isRead'] = true;
+  }
+
+  Future<void> markAllNotificationsAsRead(String userId) async {
+    for (var n in _notifications.where((n) => n['userId'] == userId)) {
+      n['isRead'] = true;
+    }
+  }
+
+  Future<void> deleteNotification(String id) async {
+    _notifications.removeWhere((n) => n['id'] == id);
+  }
+
+  // --- Messaging ---
+  Future<List<dynamic>> getConversations(String userId) async {
+    // In a real app this groups messages. Mocking simple list.
+    return _conversations;
+  }
+
+  Future<List<dynamic>> getMessages(String userId, String otherUserId) async {
+    return _messages
+        .where((m) =>
+            (m['senderId'] == userId && m['receiverId'] == otherUserId) ||
+            (m['senderId'] == otherUserId && m['receiverId'] == userId))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> sendMessage(Map<String, dynamic> data) async {
+    final msg = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      ...data,
+      'isRead': false,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    _messages.add(msg);
+    return msg;
+  }
+
+  // --- User Profile ---
+  Future<Map<String, dynamic>> getUserProfile(String userId) async {
+    return _users.firstWhere((u) => u['id'] == userId,
+        orElse: () => {
+              'id': userId,
+              'username': 'unknown',
+              'displayName': 'Unknown',
+              'email': '',
+              'role': 'student',
+              'createdAt': DateTime.now().toIso8601String()
+            });
+  }
+
+  Future<Map<String, dynamic>> updateUserProfile(
+      String userId, Map<String, dynamic> data) async {
+    final index = _users.indexWhere((u) => u['id'] == userId);
+    if (index != -1) {
+      _users[index] = {..._users[index], ...data};
+      return _users[index];
+    }
+    return {};
+  }
+
+  Future<String> uploadAvatar(String userId, String path) async {
+    return path; // Mock: return local path
+  }
+
+  Future<void> changePassword(String userId, String old, String newPass) async {
+    // Mock success
+  }
+
+  Future uploadStudentCsv(File file) async {}
 }

@@ -23,6 +23,11 @@ dependencies:
   # Local Storage & Database
   shared_preferences: ^2.2.2
   sqflite: ^2.3.0
+  # ADDED: Required for Windows/Desktop
+  sqflite_common_ffi: ^2.3.2
+  # ADDED: Required for Web
+  sqflite_common_ffi_web: ^0.4.0
+  
   path_provider: ^2.1.1
   path: ^1.9.0
   hive: ^2.2.3
