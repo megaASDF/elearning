@@ -1,3 +1,4 @@
+import 'package:elearning_app/core/providers/submission_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,45 +11,51 @@ import 'core/providers/semester_provider.dart';
 import 'core/providers/course_provider.dart';
 import 'core/providers/group_provider.dart';
 import 'core/providers/student_provider.dart';
+import 'core/providers/assignment_provider.dart'; // ADD
+import 'core/providers/material_provider.dart'; // ADD
+import 'core/providers/announcement_provider.dart'; // ADD
 import 'core/services/notification_service.dart';
 import 'core/services/connectivity_service.dart';
 
 void main() async {
-  WidgetsFlutterBinding. ensureInitialized();
-  
+  WidgetsFlutterBinding.ensureInitialized();
+
   // Initialize Firebase
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions. currentPlatform,
+    options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   // Initialize default semester if none exists
   await _initializeDefaultData();
-  
+
   // Initialize notification service (non-web only)
   if (!kIsWeb) {
-    await NotificationService(). initialize();
+    await NotificationService().initialize();
   }
-  
+
   // Initialize connectivity service
-  await ConnectivityService. instance.initialize();
-  
+  await ConnectivityService.instance.initialize();
+
   runApp(const MyApp());
 }
 
 Future<void> _initializeDefaultData() async {
   try {
-    final firestore = FirebaseFirestore. instance;
-    
+    final firestore = FirebaseFirestore.instance;
+
     // Check if default semester exists
-    final semesterQuery = await firestore. collection('semesters').limit(1).get();
-    
+    final semesterQuery =
+        await firestore.collection('semesters').limit(1).get();
+
     if (semesterQuery.docs.isEmpty) {
       // Create default semester
       await firestore.collection('semesters').add({
         'code': 'HK1-2024',
         'name': 'Semester 1, 2024-2025',
-        'startDate': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 30))),
-        'endDate': Timestamp.fromDate(DateTime.now(). add(const Duration(days: 90))),
+        'startDate': Timestamp.fromDate(
+            DateTime.now().subtract(const Duration(days: 30))),
+        'endDate':
+            Timestamp.fromDate(DateTime.now().add(const Duration(days: 90))),
         'isCurrent': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -71,11 +78,15 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CourseProvider()),
         ChangeNotifierProvider(create: (_) => GroupProvider()),
         ChangeNotifierProvider(create: (_) => StudentProvider()),
-        ChangeNotifierProvider. value(value: ConnectivityService.instance),
+        ChangeNotifierProvider(create: (_) => AssignmentProvider()), // ADD
+        ChangeNotifierProvider(create: (_) => MaterialProvider()), // ADD
+        ChangeNotifierProvider(create: (_) => AnnouncementProvider()),
+        ChangeNotifierProvider(create: (_) => SubmissionProvider()), // ADD
+        ChangeNotifierProvider.value(value: ConnectivityService.instance),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {
-          return MaterialApp. router(
+          return MaterialApp.router(
             title: 'E-Learning App',
             debugShowCheckedModeBanner: false,
             theme: ThemeData(

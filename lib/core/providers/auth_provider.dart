@@ -128,6 +128,47 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> signUp(String email, String password, String displayName, String role) async {
+  _isLoading = true;
+  _error = null;
+  notifyListeners();
+
+  try {
+    // Create Firebase Auth user
+    final userCred = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    // Create user document in Firestore
+    await _firestore.collection('users').doc(userCred.user!.uid).set({
+      'email': email,
+      'displayName': displayName,
+      'role': role,
+      'username': email.split('@')[0], // Generate username from email
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Load user data
+    await _loadUserData(userCred.user!.uid);
+
+    _isLoading = false;
+    notifyListeners();
+  } catch (e) {
+    _error = e.toString();
+    _isLoading = false;
+    notifyListeners();
+    debugPrint('Error signing up: $e');
+    rethrow;
+  }
+}
+
+  Future<void> signOut() async {
+  await _auth.signOut();
+  _user = null;
+  notifyListeners();
+}
+
   Future<void> logout() async {
     await _auth.signOut();
     _user = null;

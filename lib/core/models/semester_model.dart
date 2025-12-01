@@ -5,28 +5,31 @@ class SemesterModel {
   final DateTime startDate;
   final DateTime endDate;
   final bool isCurrent;
+  final String createdAt;
 
   SemesterModel({
-    required this.id,
+    required this. id,
     required this.code,
     required this.name,
     required this.startDate,
     required this.endDate,
-    this.isCurrent = false,
-  });
+    required this.isCurrent,
+    String? createdAt, // Make it optional with default
+  }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
 
   factory SemesterModel.fromJson(Map<String, dynamic> json) {
     return SemesterModel(
       id: json['id'] ?? '',
       code: json['code'] ?? '',
       name: json['name'] ?? '',
-      startDate: json['startDate'] != null
+      startDate: json['startDate'] is String 
           ? DateTime.parse(json['startDate'])
-          : DateTime.now(),
-      endDate: json['endDate'] != null
+          : json['startDate'] as DateTime,
+      endDate: json['endDate'] is String 
           ? DateTime.parse(json['endDate'])
-          : DateTime.now(),
+          : json['endDate'] as DateTime,
       isCurrent: json['isCurrent'] ?? false,
+      createdAt: json['createdAt'] ?? DateTime.now().toIso8601String(),
     );
   }
 
@@ -38,6 +41,7 @@ class SemesterModel {
       'startDate': startDate.toIso8601String(),
       'endDate': endDate.toIso8601String(),
       'isCurrent': isCurrent,
+      'createdAt': createdAt,
     };
   }
 }

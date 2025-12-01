@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import '../../features/auth/screens/login_screen.dart';
+import '../../features/auth/screens/register_screen.dart';
 import '../../features/home/screens/student_home_screen.dart';
 import '../../features/home/screens/instructor_dashboard_screen.dart';
 import '../../features/course/screens/course_detail_screen.dart';
@@ -11,6 +12,10 @@ class AppRouter {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
         path: '/student-home',

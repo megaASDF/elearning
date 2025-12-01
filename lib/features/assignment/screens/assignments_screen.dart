@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/models/assignment_model.dart';
-import '../../../core/services/api_service.dart';
+import '../../../core/providers/assignment_provider.dart';
 import '../widgets/assignment_form_dialog.dart';
 import 'assignment_detail_screen.dart';
 
@@ -23,54 +24,52 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
   List<AssignmentModel> _filteredAssignments = [];
   bool _isLoading = true;
   String _searchQuery = '';
-  String _sortBy = 'deadline'; // deadline, title, created
+  String _sortBy = 'created'; // created, title, deadline
 
   @override
   void initState() {
     super.initState();
-    _loadAssignments();
+    WidgetsBinding. instance.addPostFrameCallback((_) {
+      _loadAssignments();
+    });
   }
 
   Future<void> _loadAssignments() async {
     setState(() => _isLoading = true);
-    try {
-      final apiService = ApiService();
-      final data = await apiService.getAssignments(widget.courseId);
-      if (mounted) {
-        setState(() {
-          _assignments = data.map((json) => AssignmentModel.fromJson(json)).toList();
-          _filterAndSort();
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading assignments: $e')),
-        );
-      }
+    final provider = context.read<AssignmentProvider>();
+    await provider. loadAssignments(widget.courseId);
+    
+    if (mounted) {
+      setState(() {
+        _assignments = provider.assignments;
+        _filteredAssignments = _assignments;
+        _filterAndSort();
+        _isLoading = false;
+      });
     }
   }
 
   void _filterAndSort() {
-    _filteredAssignments = _assignments.where((assignment) {
-      return assignment.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          assignment.description.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
+    setState(() {
+      // Filter
+      if (_searchQuery.isEmpty) {
+        _filteredAssignments = List.from(_assignments);
+      } else {
+        _filteredAssignments = _assignments.where((a) {
+          return a.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              a.description.toLowerCase().contains(_searchQuery.toLowerCase());
+        }).toList();
+      }
 
-    // Sort
-    switch (_sortBy) {
-      case 'deadline':
-        _filteredAssignments.sort((a, b) => a.deadline.compareTo(b.deadline));
-        break;
-      case 'title':
+      // Sort
+      if (_sortBy == 'deadline') {
+        _filteredAssignments.sort((a, b) => a.deadline.compareTo(b. deadline));
+      } else if (_sortBy == 'title') {
         _filteredAssignments.sort((a, b) => a.title.compareTo(b.title));
-        break;
-      case 'created':
-        _filteredAssignments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        break;
-    }
+      } else if (_sortBy == 'created') {
+        _filteredAssignments.sort((a, b) => b.createdAt.compareTo(a. createdAt));
+      }
+    });
   }
 
   Future<void> _showAssignmentDialog({AssignmentModel? assignment}) async {
@@ -110,11 +109,9 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
 
     if (confirm == true && mounted) {
       try {
-        final apiService = ApiService();
-        await apiService.deleteAssignment(assignment.id);
-        await _loadAssignments();
+        await context.read<AssignmentProvider>().deleteAssignment(assignment. id, widget.courseId);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context). showSnackBar(
             const SnackBar(
               content: Text('Assignment deleted successfully'),
               backgroundColor: Colors.green,
@@ -123,7 +120,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger. of(context).showSnackBar(
             SnackBar(
               content: Text('Error: $e'),
               backgroundColor: Colors.red,
@@ -135,11 +132,11 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
   }
 
   Widget _buildStatusChip(AssignmentModel assignment) {
-    if (assignment.isPastDeadline) {
+    if (assignment. isPastDeadline) {
       return Chip(
-        label: const Text('Closed', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.red,
-        visualDensity: VisualDensity.compact,
+        label: const Text('Closed', style: TextStyle(color: Colors. white)),
+        backgroundColor: Colors. red,
+        visualDensity: VisualDensity. compact,
       );
     } else if (assignment.isActive) {
       return Chip(
@@ -191,7 +188,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         ],
       ),
       floatingActionButton: widget.isInstructor
-          ? FloatingActionButton.extended(
+          ?  FloatingActionButton. extended(
               onPressed: () => _showAssignmentDialog(),
               icon: const Icon(Icons.add),
               label: const Text('New Assignment'),
@@ -204,7 +201,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
             child: TextField(
               decoration: InputDecoration(
                 hintText: 'Search assignments...',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(Icons. search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -238,7 +235,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                       )
                     : RefreshIndicator(
                         onRefresh: _loadAssignments,
-                        child: ListView.builder(
+                        child: ListView. builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: _filteredAssignments.length,
                           itemBuilder: (context, index) {
@@ -256,7 +253,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                                         isInstructor: widget.isInstructor,
                                       ),
                                     ),
-                                  ).then((_) => _loadAssignments());
+                                  ). then((_) => _loadAssignments());
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),
@@ -327,13 +324,13 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                                               size: 16, color: Colors.grey[600]),
                                           const SizedBox(width: 4),
                                           Text(
-                                            'Due: ${assignment.deadline.day}/${assignment.deadline.month}/${assignment.deadline.year} ${assignment.deadline.hour.toString().padLeft(2, '0')}:${assignment.deadline.minute.toString().padLeft(2, '0')}',
+                                            'Due: ${assignment.deadline.day}/${assignment.deadline.month}/${assignment.deadline.year} ${assignment.deadline.hour. toString().padLeft(2, '0')}:${assignment.deadline.minute.toString().padLeft(2, '0')}',
                                             style: TextStyle(color: Colors.grey[600]),
                                           ),
                                           if (assignment.attachments.isNotEmpty) ...[
                                             const SizedBox(width: 16),
                                             Icon(Icons.attach_file,
-                                                size: 16, color: Colors.grey[600]),
+                                                size: 16, color: Colors. grey[600]),
                                             const SizedBox(width: 4),
                                             Text(
                                               '${assignment.attachments.length} file(s)',

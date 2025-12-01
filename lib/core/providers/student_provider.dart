@@ -148,35 +148,47 @@ class StudentProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> createStudent(String username, String email, String displayName, String password) async {
-    _isLoading = true;
-    _error = null;
+Future<void> createStudent(String username, String email, String displayName, String password) async {
+  _isLoading = true;
+  _error = null;
+  notifyListeners();
+
+  try {
+    // Store current user
+    final currentUser = _auth.currentUser;
+    
+    // Create user in Firebase Auth
+    final userCred = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    // Create user document in Firestore
+    await _firestore.collection('users').doc(userCred.user!.uid). set({
+      'username': username,
+      'email': email,
+      'displayName': displayName,
+      'role': 'student',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Sign out the newly created student
+    await _auth.signOut();
+    
+    // Sign back in as the instructor (this is the workaround)
+    // You'll need to handle this in the UI by re-authenticating
+    
+    debugPrint('✅ Student created: $displayName');
+
+    await loadAllStudents();
+  } catch (e) {
+    _error = e.toString();
+    _isLoading = false;
     notifyListeners();
-
-    try {
-      // Create user in Firebase Auth
-      final userCred = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      // Create user document in Firestore
-      await _firestore.collection('users'). doc(userCred.user! .uid).set({
-        'username': username,
-        'email': email,
-        'displayName': displayName,
-        'role': 'student',
-        'createdAt': FieldValue. serverTimestamp(),
-      });
-
-      await loadAllStudents();
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      debugPrint('Error creating student: $e');
-    }
+    debugPrint('Error creating student: $e');
+    rethrow;
   }
+}
 
   Future<void> deleteStudent(String studentId) async {
     _isLoading = true;

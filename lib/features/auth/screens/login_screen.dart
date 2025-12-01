@@ -25,9 +25,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
-      final authProvider = context.read<AuthProvider>();
+      final authProvider = context. read<AuthProvider>();
       final success = await authProvider.login(
-        _usernameController.text.trim(),
+        _usernameController. text.trim(),
         _passwordController.text,
       );
 
@@ -35,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (authProvider.isInstructor) {
           context.go('/instructor-dashboard');
         } else {
-          context.go('/student-home');
+          context. go('/student-home');
         }
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -62,18 +62,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   Icon(
                     Icons.school,
                     size: 80,
-                    color: Theme.of(context).primaryColor,
+                    color: Theme.of(context). primaryColor,
                   ),
                   const SizedBox(height: 24),
                   Text(
                     'E-Learning Platform',
                     style: Theme.of(context).textTheme.headlineMedium,
-                    textAlign: TextAlign.center,
+                    textAlign: TextAlign. center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Faculty of Information Technology',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: Theme. of(context).textTheme. bodyMedium,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 48),
@@ -102,12 +102,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
-                              ? Icons.visibility
+                              ?  Icons.visibility
                               : Icons.visibility_off,
                         ),
                         onPressed: () {
                           setState(() {
-                            _obscurePassword = !_obscurePassword;
+                            _obscurePassword = ! _obscurePassword;
                           });
                         },
                       ),
@@ -128,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
                         child: authProvider.isLoading
-                            ? const SizedBox(
+                            ?  const SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(strokeWidth: 2),
@@ -137,6 +137,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       );
                     },
                   ),
+                  const SizedBox(height: 16),
+                  
+                  // CREATE ACCOUNT BUTTON - NEW
+                  OutlinedButton(
+                    onPressed: () {
+                      context.push('/register');
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text('Create Account', style: TextStyle(fontSize: 16)),
+                  ),
+                  
                   const SizedBox(height: 16),
                   Text(
                     'Instructor: admin/admin\nStudent: Use any username',

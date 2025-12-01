@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/services/api_service.dart';
 import '../../../core/providers/semester_provider.dart';
+import '../../../core/models/semester_model.dart';
 
 class ManageSemestersScreen extends StatefulWidget {
   const ManageSemestersScreen({super.key});
@@ -11,61 +11,96 @@ class ManageSemestersScreen extends StatefulWidget {
 }
 
 class _ManageSemestersScreenState extends State<ManageSemestersScreen> {
-  List<dynamic> _semesters = [];
-  bool _isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadSemesters();
-  }
-
-  Future<void> _loadSemesters() async {
-    setState(() => _isLoading = true);
-    try {
-      final data = await ApiService().getSemesters();
-      if (mounted) {
-        setState(() {
-          _semesters = data;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    // Load semesters when screen opens
+    Future.microtask(() => context. read<SemesterProvider>(). loadSemesters());
   }
 
   Future<void> _addSemesterDialog() async {
     final codeCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
+    DateTime startDate = DateTime.now();
+    DateTime endDate = DateTime.now().add(const Duration(days: 120));
 
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('New Semester'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Code (e.g. HK2-24)')),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-          ],
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize. min,
+            children: [
+              TextField(
+                controller: codeCtrl,
+                decoration: const InputDecoration(labelText: 'Code (e.g.  HK2-24)'),
+              ),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                title: const Text('Start Date'),
+                subtitle: Text('${startDate.day}/${startDate.month}/${startDate. year}'),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: startDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (date != null) {
+                    setState(() => startDate = date);
+                  }
+                },
+              ),
+              ListTile(
+                title: const Text('End Date'),
+                subtitle: Text('${endDate.day}/${endDate.month}/${endDate.year}'),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: endDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (date != null) {
+                    setState(() => endDate = date);
+                  }
+                },
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
-              if (codeCtrl.text.isNotEmpty) {
-                await ApiService().createSemester({
-                  'code': codeCtrl.text, 
-                  'name': nameCtrl.text,
-                  'isCurrent': false // Default
-                });
+              if (codeCtrl.text.isNotEmpty && nameCtrl.text.isNotEmpty) {
+                final semester = SemesterModel(
+                  id: '',
+                  code: codeCtrl.text,
+                  name: nameCtrl.text,
+                  startDate: startDate,
+                  endDate: endDate,
+                  isCurrent: false,
+                  
+                );
+
+                await context.read<SemesterProvider>().createSemester(semester);
                 
                 if (mounted) {
-                  // Refresh global provider and local list
-                  await context.read<SemesterProvider>().loadSemesters();
-                  Navigator.pop(context);
-                  _loadSemesters(); 
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Semester created successfully')),
+                  );
                 }
               }
             },
@@ -84,19 +119,36 @@ class _ManageSemestersScreenState extends State<ManageSemestersScreen> {
         onPressed: _addSemesterDialog,
         child: const Icon(Icons.add),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : ListView.builder(
-            itemCount: _semesters.length,
+      body: Consumer<SemesterProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (provider.semesters.isEmpty) {
+            return const Center(
+              child: Text('No semesters yet. Create one!'),
+            );
+          }
+
+          return ListView. builder(
+            itemCount: provider.semesters.length,
             itemBuilder: (context, index) {
-              final s = _semesters[index];
+              final semester = provider.semesters[index];
               return ListTile(
-                title: Text(s['name']),
-                subtitle: Text(s['code']),
-                trailing: s['isCurrent'] == true ? const Chip(label: Text('Current')) : null,
+                title: Text(semester.name),
+                subtitle: Text(semester.code),
+                trailing: semester.isCurrent 
+                  ? const Chip(label: Text('Current')) 
+                  : null,
+                onTap: () {
+                  // Optional: Add edit functionality
+                },
               );
             },
-          ),
+          );
+        },
+      ),
     );
   }
 }
