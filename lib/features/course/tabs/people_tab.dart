@@ -52,32 +52,76 @@ class _PeopleTabState extends State<PeopleTab> {
   // --- Create Group ---
   Future<void> _createGroupDialog() async {
     final nameCtrl = TextEditingController();
+    bool isCreating = false;
+    
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Group'),
-        content: TextField(
-          controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Group Name (e.g. Group 1)'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameCtrl.text.isNotEmpty) {
-                await ApiService().createGroup({
-                  'courseId': widget.courseId,
-                  'name': nameCtrl.text,
-                });
-                if (mounted) {
-                  Navigator.pop(context);
-                  _loadData(); // Refresh
-                }
-              }
-            },
-            child: const Text('Create'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create Group'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Group Name',
+                  border: OutlineInputBorder(),
+                ),
+                enabled: !isCreating,
+              ),
+              if (isCreating) ...[
+                const SizedBox(height: 16),
+                const CircularProgressIndicator(),
+                const Text('Creating group...'),
+              ],
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isCreating ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isCreating ? null : () async {
+                if (nameCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter group name')),
+                  );
+                  return;
+                }
+                
+                setDialogState(() => isCreating = true);
+                
+                try {
+                  await ApiService().createGroup({
+                    'courseId': widget.courseId,
+                    'name': nameCtrl.text.trim(),
+                  });
+                  
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    await _loadData();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Group created successfully'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setDialogState(() => isCreating = false);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
       ),
     );
   }
