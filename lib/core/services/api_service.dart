@@ -6,13 +6,11 @@ import '../models/user_model.dart';
 
 // This Service acts as a Mock Backend for the application
 class ApiService {
-  static final ApiService _instance = ApiService._internal();
-  factory ApiService() => _instance;
-  ApiService._internal() {
-    _initializeMockData();
-  }
-
-  String? _token;
+  static const String baseUrl = 'http://localhost:3000/api'; // Change to your backend URL
+  // For Android emulator use: http://10.0.2.2:3000/api
+  // For real device use your computer's IP: http://192.168.1.x:3000/api
+  
+  String?  _token;
   
   // --- In-Memory Database (Mock) ---
   final List<Map<String, dynamic>> _users = [];
