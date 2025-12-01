@@ -35,11 +35,29 @@ class _ForumScreenState extends State<ForumScreen> {
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      // Print to console/terminal
+      debugPrint('🔥🔥🔥 FORUM ERROR 🔥🔥🔥');
+      debugPrint('Error loading forum topics: $e');
+      debugPrint('Stack trace: $stackTrace');
+      debugPrint('🔥🔥🔥 END ERROR 🔥🔥🔥\n');
+      
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context). showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors. red,
+            duration: const Duration(seconds: 10),
+            action: SnackBarAction(
+              label: 'Copy Error',
+              textColor: Colors.white,
+              onPressed: () {
+                // Could add clipboard copy here if needed
+              },
+            ),
+          ),
+        );
       }
     }
   }
@@ -56,8 +74,7 @@ class _ForumScreenState extends State<ForumScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredTopics = _topics
-        .where(
-            (t) => t.title.toLowerCase().contains(_searchQuery.toLowerCase()))
+        . where((t) => t.title.toLowerCase().contains(_searchQuery.toLowerCase()))
         .toList();
 
     return Scaffold(
@@ -74,9 +91,8 @@ class _ForumScreenState extends State<ForumScreen> {
             child: TextField(
               decoration: InputDecoration(
                 hintText: 'Search topics...',
-                prefixIcon: const Icon(Icons.search),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons. search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
@@ -87,14 +103,14 @@ class _ForumScreenState extends State<ForumScreen> {
                 : filteredTopics.isEmpty
                     ? Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment. center,
                           children: [
-                            Icon(Icons.forum,
-                                size: 64, color: Colors.grey[400]),
+                            Icon(Icons.forum, size: 64, color: Colors.grey[400]),
                             const SizedBox(height: 16),
-                            Text('No topics yet',
-                                style: TextStyle(
-                                    fontSize: 18, color: Colors.grey[600])),
+                            Text(
+                              'No topics yet',
+                              style: TextStyle(fontSize: 18, color: Colors. grey[600]),
+                            ),
                             const SizedBox(height: 8),
                             const Text('Start a discussion!'),
                           ],
@@ -102,7 +118,7 @@ class _ForumScreenState extends State<ForumScreen> {
                       )
                     : RefreshIndicator(
                         onRefresh: _loadTopics,
-                        child: ListView.builder(
+                        child: ListView. builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: filteredTopics.length,
                           itemBuilder: (context, index) {
@@ -111,38 +127,56 @@ class _ForumScreenState extends State<ForumScreen> {
                               margin: const EdgeInsets.only(bottom: 12),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                    child: Text(
-                                        topic.authorName[0].toUpperCase())),
-                                title: Text(topic.title,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold)),
+                                  child: Text(topic.authorName[0].toUpperCase()),
+                                ),
+                                title: Text(
+                                  topic.title,
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const SizedBox(height: 4),
-                                    Text(topic.content,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      topic.content,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                     const SizedBox(height: 4),
                                     Row(
                                       children: [
-                                        Text('${topic.authorName} • ',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600])),
-                                        Icon(Icons.chat_bubble_outline,
-                                            size: 14, color: Colors.grey[600]),
-                                        Text(' ${topic.replyCount}',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600])),
+                                        Text(
+                                          '${topic.authorName} • ',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.chat_bubble_outline,
+                                          size: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                        Text(
+                                          ' ${topic.replyCount}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
                                         const SizedBox(width: 8),
-                                        Icon(Icons.visibility,
-                                            size: 14, color: Colors.grey[600]),
-                                        Text(' ${topic.viewCount}',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600])),
+                                        Icon(
+                                          Icons.visibility,
+                                          size: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                        Text(
+                                          ' ${topic.viewCount}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ],
@@ -152,9 +186,9 @@ class _ForumScreenState extends State<ForumScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) =>
-                                          ForumTopicDetailScreen(
-                                              topicId: topic.id),
+                                      builder: (context) => ForumTopicDetailScreen(
+                                        topicId: topic.id,
+                                      ),
                                     ),
                                   ).then((_) => _loadTopics());
                                 },

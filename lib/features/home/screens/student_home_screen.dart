@@ -1,3 +1,4 @@
+import 'package:elearning_app/features/dashboard/screens/student_dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +6,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/semester_provider.dart';
 import '../../../core/providers/course_provider.dart';
 import '../../../core/services/api_service.dart';
-import '../../profile/sceens/profile_screen.dart' show ProfileScreen;
+import '../../profile/screens/profile_screen.dart' show ProfileScreen;
 import '../widgets/course_card.dart';
 import '../widgets/semester_selector.dart';
 import '../../notification/screens/notifications_screen.dart';
@@ -128,6 +129,18 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               );
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.dashboard),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const StudentDashboardScreen(),
+                ),
+              );
+            },
+          ),
+
           // Logout Icon
           IconButton(
             icon: const Icon(Icons.logout),

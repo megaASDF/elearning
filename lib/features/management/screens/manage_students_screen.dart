@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/student_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../profile/screens/student_profile_view_screen.dart';
 
 class ManageStudentsScreen extends StatefulWidget {
   const ManageStudentsScreen({super.key});

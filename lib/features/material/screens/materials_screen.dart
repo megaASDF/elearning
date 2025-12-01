@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../core/models/material_model.dart';
 import '../../../core/providers/material_provider.dart';
@@ -21,14 +22,14 @@ class MaterialsScreen extends StatefulWidget {
 class _MaterialsScreenState extends State<MaterialsScreen> {
   @override
   void initState() {
-    super.initState();
+    super. initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMaterials();
     });
   }
 
   Future<void> _loadMaterials() async {
-    final provider = context. read<MaterialProvider>();
+    final provider = context.read<MaterialProvider>();
     await provider.loadMaterials(widget.courseId);
   }
 
@@ -52,7 +53,7 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Material'),
-        content: Text('Are you sure you want to delete "${material. title}"?'),
+        content: Text('Are you sure you want to delete "${material.title}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -69,9 +70,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
 
     if (confirm == true && mounted) {
       try {
-        await context. read<MaterialProvider>().deleteMaterial(material.id, widget. courseId);
+        await context.read<MaterialProvider>().deleteMaterial(material.id, widget.courseId);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context). showSnackBar(
             const SnackBar(
               content: Text('Material deleted successfully'),
               backgroundColor: Colors.green,
@@ -91,15 +92,148 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     }
   }
 
+  void _showMaterialDetailsDialog(MaterialModel material, MaterialProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(material.title),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (material.description. isNotEmpty) ...[
+                Text(
+                  material.description,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (material.fileUrls.isNotEmpty) ...[
+                const Text(
+                  'Files:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ... material.fileUrls.map((url) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: const Icon(Icons.insert_drive_file, color: Colors.blue),
+                    title: Text(
+                      url,
+                      style: const TextStyle(fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.copy, size: 20),
+                      tooltip: 'Copy link',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Link copied to clipboard! '),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                )),
+                const SizedBox(height: 8),
+              ],
+              if (material.links.isNotEmpty) ...[
+                const Text(
+                  'Links:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ...material.links.map((link) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: const Icon(Icons.link, color: Colors.green),
+                    title: Text(
+                      link,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.blue,
+                        decoration: TextDecoration.underline,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.copy, size: 20),
+                      tooltip: 'Copy link',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: link));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Link copied to clipboard!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                )),
+                const SizedBox(height: 8),
+              ],
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Author: ${material.authorName}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.visibility, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Views: ${material.viewCount}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(Icons. download, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Downloads: ${material.downloadCount}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    
+    // Increment view count
+    provider.incrementViewCount(material.id);
+  }
+
   IconData _getIconForMaterial(MaterialModel material) {
     if (material.fileUrls.isNotEmpty) {
-      final url = material.fileUrls.first.toLowerCase();
+      final url = material.fileUrls. first. toLowerCase();
       if (url.endsWith('.pdf')) return Icons.picture_as_pdf;
-      if (url.endsWith('.mp4') || url. endsWith('.mov')) return Icons. video_library;
-      if (url.endsWith('.doc') || url.endsWith('.docx')) return Icons.description;
+      if (url.endsWith('.mp4') || url.endsWith('.mov')) return Icons.video_library;
+      if (url.endsWith('. doc') || url.endsWith('. docx')) return Icons.description;
       if (url.endsWith('.jpg') || url.endsWith('.png')) return Icons.image;
       return Icons.insert_drive_file;
-    } else if (material. links.isNotEmpty) {
+    } else if (material.links.isNotEmpty) {
       return Icons.link;
     }
     return Icons.insert_drive_file;
@@ -111,10 +245,10 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
       appBar: AppBar(
         title: const Text('Materials'),
       ),
-      floatingActionButton: widget. isInstructor
+      floatingActionButton: widget.isInstructor
           ?  FloatingActionButton. extended(
               onPressed: () => _showMaterialDialog(),
-              icon: const Icon(Icons. add),
+              icon: const Icon(Icons.add),
               label: const Text('Add Material'),
             )
           : null,
@@ -129,11 +263,11 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.folder_open, size: 64, color: Colors. grey[400]),
+                  Icon(Icons.folder_open, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   const Text(
                     'No materials yet',
-                    style: TextStyle(fontSize: 18, color: Colors. grey),
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
                   ),
                 ],
               ),
@@ -146,7 +280,7 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               padding: const EdgeInsets.all(16),
               itemCount: provider.materials.length,
               itemBuilder: (context, index) {
-                final material = provider. materials[index];
+                final material = provider.materials[index];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
@@ -154,11 +288,15 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                       backgroundColor: Colors.blue,
                       child: Icon(
                         _getIconForMaterial(material),
-                        color: Colors. white,
+                        color: Colors.white,
                       ),
                     ),
                     title: Text(material.title),
-                    subtitle: Text(material.description),
+                    subtitle: Text(
+                      material.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     trailing: widget.isInstructor
                         ? PopupMenuButton(
                             itemBuilder: (context) => [
@@ -166,7 +304,7 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                                 value: 'edit',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.edit, size: 20),
+                                    Icon(Icons. edit, size: 20),
                                     SizedBox(width: 8),
                                     Text('Edit'),
                                   ],
@@ -192,10 +330,7 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                             },
                           )
                         : null,
-                    onTap: () {
-                      // Handle material view/download
-                      provider. incrementViewCount(material.id);
-                    },
+                    onTap: () => _showMaterialDetailsDialog(material, provider),
                   ),
                 );
               },

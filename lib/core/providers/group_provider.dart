@@ -15,36 +15,59 @@ class GroupProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  Future<void> loadGroups(String courseId) async {
-    _isLoading = true;
-    _error = null;
+Future<void> loadGroups(String courseId) async {
+  _isLoading = true;
+  _error = null;
+  notifyListeners();
+
+  debugPrint('🔍 Loading groups for courseId: $courseId');
+
+  try {
+    final snapshot = await _firestore
+        .collection('groups')
+        . where('courseId', isEqualTo: courseId)
+        . get();
+
+    debugPrint('📦 Found ${snapshot.docs.length} groups in Firestore');
+
+    _groups = snapshot. docs.map((doc) {
+      final data = doc.data();
+      debugPrint('  - Group: ${data['name']} (ID: ${doc.id}, courseId: ${data['courseId']})');
+      return GroupModel. fromJson({
+        'id': doc.id,
+        'courseId': data['courseId'] ??  courseId,
+        'name': data['name'] ?? '',
+        'description': data['description'],
+        'maxStudents': data['maxStudents'],
+        'studentCount': data['studentCount'] ??  0,
+        'createdAt': _convertToIsoString(data['createdAt']),
+      });
+    }).toList();
+
+    debugPrint('✅ Loaded ${_groups. length} groups successfully');
+
+    _isLoading = false;
     notifyListeners();
-
-    try {
-      final snapshot = await _firestore
-          .collection('groups')
-          .where('courseId', isEqualTo: courseId)
-          .get();
-
-      _groups = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return GroupModel.fromJson({
-          'id': doc.id,
-          ...data,
-          'studentCount': (data['studentIds'] as List?)?.length ?? 0,
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
-        });
-      }).toList();
-
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      debugPrint('Error loading groups: $e');
-    }
+  } catch (e) {
+    _error = e. toString();
+    _isLoading = false;
+    notifyListeners();
+    debugPrint('❌ Error loading groups: $e');
   }
+}
+
+// Add helper method in GroupProvider
+String _convertToIsoString(dynamic value) {
+  if (value == null) {
+    return DateTime.now().toIso8601String();
+  } else if (value is Timestamp) {
+    return value.toDate(). toIso8601String();
+  } else if (value is String) {
+    return value;
+  } else {
+    return DateTime.now().toIso8601String();
+  }
+}
 
   Future<void> createGroup(GroupModel group) async {
     _isLoading = true;

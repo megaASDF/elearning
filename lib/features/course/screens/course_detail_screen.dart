@@ -142,7 +142,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
         body: TabBarView(
           controller: _tabController,
           children: [
-            StreamTab(courseId: widget.courseId),
+            StreamTab(courseId: widget.courseId, isInstructor: isInstructor),
             ClassworkTab(courseId: widget.courseId, isInstructor: isInstructor),
             PeopleTab(courseId: widget.courseId),
           ],

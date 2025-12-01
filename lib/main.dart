@@ -1,4 +1,5 @@
 import 'package:elearning_app/core/providers/submission_provider.dart';
+import 'package:elearning_app/core/services/offline_database_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -20,10 +21,19 @@ import 'core/services/connectivity_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Add this to catch and log all errors
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint(' FLUTTER ERROR ');
+    debugPrint('Exception: ${details.exception}');
+    debugPrint('Stack trace: ${details.stack}');
+    debugPrint(' END ERROR \n');
+  };
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await OfflineDatabaseService.initialize();
 
   // Initialize default semester if none exists
   await _initializeDefaultData();

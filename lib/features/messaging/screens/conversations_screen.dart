@@ -128,14 +128,17 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                     },
                   ),
                 ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: context.read<AuthProvider>().user?.role == 'instructor'
+    ? null // Instructors don't need this button
+    : FloatingActionButton. extended(
         onPressed: () {
+        
           // Navigate to instructor chat (for students)
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => const ChatScreen(
-                otherUserId: '1',
+                otherUserId: 'pj0vB0t1j6ccAiWw3hs2vvGhPWz2',
                 otherUserName: 'Administrator',
               ),
             ),

@@ -13,36 +13,57 @@ class MaterialProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  Future<void> loadMaterials(String courseId) async {
-    _isLoading = true;
-    _error = null;
+Future<void> loadMaterials(String courseId) async {
+  _isLoading = true;
+  _error = null;
+  notifyListeners();
+
+  try {
+    final snapshot = await _firestore
+        .collection('materials')
+        .where('courseId', isEqualTo: courseId)
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    _materials = snapshot.docs.map((doc) {
+      final data = doc.data();
+      return MaterialModel.fromJson({
+        'id': doc.id,
+        'courseId': data['courseId'] ?? courseId,
+        'title': data['title'] ?? '',
+        'description': data['description'] ?? '',
+        'fileUrls': data['fileUrls'] ?? [],
+        'links': data['links'] ?? [],
+        'authorName': data['authorName'] ??  'Unknown',
+        'viewCount': data['viewCount'] ??  0,
+        'downloadCount': data['downloadCount'] ?? 0,
+        'createdAt': _convertToIsoString(data['createdAt']),
+        'updatedAt': _convertToIsoString(data['updatedAt']),
+      });
+    }).toList();
+
+    _isLoading = false;
     notifyListeners();
-
-    try {
-      final snapshot = await _firestore
-          .collection('materials')
-          .where('courseId', isEqualTo: courseId)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      _materials = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return MaterialModel.fromJson({
-          'id': doc.id,
-          ... data,
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate(). toIso8601String() ?? DateTime.now().toIso8601String(),
-        });
-      }). toList();
-
-      _isLoading = false;
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      debugPrint('Error loading materials: $e');
-    }
+  } catch (e) {
+    _error = e. toString();
+    _isLoading = false;
+    notifyListeners();
+    debugPrint('Error loading materials: $e');
   }
+}
+
+// Add this helper method in the provider class
+String _convertToIsoString(dynamic value) {
+  if (value == null) {
+    return DateTime.now().toIso8601String();
+  } else if (value is Timestamp) {
+    return value.toDate(). toIso8601String();
+  } else if (value is String) {
+    return value;
+  } else {
+    return DateTime.now().toIso8601String();
+  }
+}
 
   Future<void> createMaterial(String courseId, String title, String description, String contentType, {String? url, String? fileName, int? fileSize}) async {
     _isLoading = true;

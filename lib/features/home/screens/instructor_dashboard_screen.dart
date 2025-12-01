@@ -10,6 +10,7 @@ import '../widgets/dashboard_card.dart';
 import '../widgets/semester_selector.dart';
 import '../../management/screens/manage_semesters_screen.dart';
 import '../../management/screens/manage_students_screen.dart';
+import '../../management/screens/csv_import_screen.dart';
 import '../../messaging/screens/conversations_screen.dart';
 import '../../reports/screens/reports_screen.dart';
 
@@ -26,22 +27,24 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
   @override
   void initState() {
-    super.initState();
+    super. initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
       _loadUnreadMessageCount();
     });
   }
+  
+  
 
   Future<void> _loadData() async {
     if (! mounted) return;
     final semesterProvider = context.read<SemesterProvider>();
     await semesterProvider.loadSemesters();
 
-    if (!mounted) return;
+    if (! mounted) return;
     if (semesterProvider.currentSemester != null) {
       final courseProvider = context.read<CourseProvider>();
-      await courseProvider.loadCourses(semesterProvider.currentSemester!. id);
+      await courseProvider. loadCourses(semesterProvider.currentSemester!.id);
     }
   }
 
@@ -50,16 +53,32 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       final authProvider = context.read<AuthProvider>();
       final apiService = ApiService();
       
-      final conversations = await apiService.getConversations(authProvider.user?.id ?? '');
-      final unreadMessages = conversations.fold<int>(0, (sum, conv) => sum + (conv['unreadCount'] as int?  ?? 0));
+      // Get all conversations
+      final conversations = await apiService.getConversations(authProvider.user?. id ?? '');
+      
+      // Count unread messages from students TO instructor
+      int unreadCount = 0;
+      for (var conv in conversations) {
+        // Get messages in this conversation
+        final messages = await apiService.getMessages(
+          authProvider.user?.id ?? '',
+          conv['otherUserId'],
+        );
+        
+        // Count unread messages where receiver is the instructor
+        unreadCount += messages.where((msg) => 
+          msg['receiverId'] == authProvider.user?.id && 
+          !(msg['isRead'] ?? true)
+        ).length;
+      }
       
       if (mounted) {
         setState(() {
-          _unreadMessageCount = unreadMessages;
+          _unreadMessageCount = unreadCount;
         });
       }
     } catch (e) {
-      // Silent fail
+      debugPrint('Error loading unread messages: $e');
     }
   }
 
@@ -69,7 +88,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     if (currentSemester == null) {
       if (! mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context). showSnackBar(
         const SnackBar(content: Text('Please select a semester first')),
       );
       return;
@@ -124,20 +143,20 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (codeCtrl.text. isNotEmpty && nameCtrl.text.isNotEmpty) {
+              if (codeCtrl.text.isNotEmpty && nameCtrl.text.isNotEmpty) {
                 try {
                   final authProvider = dialogContext.read<AuthProvider>();
                   final course = CourseModel(
                     id: '',
                     semesterId: currentSemester. id,
-                    code: codeCtrl.text. trim(),
+                    code: codeCtrl.text.trim(),
                     name: nameCtrl.text.trim(),
-                    description: descCtrl. text.trim(),
-                    instructorName: authProvider.user?. displayName ?? 'Administrator',
+                    description: descCtrl.text. trim(),
+                    instructorName: authProvider.user?.displayName ?? 'Administrator',
                     numberOfSessions: 15,
                     groupCount: 0,
                     studentCount: 0,
-                    createdAt: DateTime.now().toIso8601String(),
+                    createdAt: DateTime.now(). toIso8601String(),
                   );
 
                   await dialogContext.read<CourseProvider>().createCourse(course);
@@ -158,7 +177,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                     Navigator.pop(ctx);
                   }
                   if (dialogContext.mounted) {
-                    ScaffoldMessenger. of(dialogContext).showSnackBar(
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(
                         content: Text('Error: $e'),
                         backgroundColor: Colors.red,
@@ -202,7 +221,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         actions: [
           if (semesterProvider.currentSemester != null)
             SemesterSelector(
-              currentSemester: semesterProvider.currentSemester!,
+              currentSemester: semesterProvider. currentSemester! ,
               semesters: semesterProvider.semesters,
               onChanged: (semester) async {
                 semesterProvider.setCurrentSemester(semester);
@@ -221,7 +240,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                 MaterialPageRoute(
                   builder: (context) => const ConversationsScreen(),
                 ),
-              ).then((_) => _loadUnreadMessageCount());
+              ). then((_) => _loadUnreadMessageCount());
             },
           ),
           PopupMenuButton(
@@ -230,36 +249,69 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
               const PopupMenuItem(
                 value: 'semesters',
                 child: Row(
-                  children: [Icon(Icons.calendar_today), SizedBox(width: 8), Text('Manage Semesters')],
+                  children: [
+                    Icon(Icons.calendar_today), 
+                    SizedBox(width: 8), 
+                    Text('Manage Semesters')
+                  ],
                 ),
               ),
               const PopupMenuItem(
                 value: 'students',
                 child: Row(
-                  children: [Icon(Icons.people), SizedBox(width: 8), Text('Manage Students')],
+                  children: [
+                    Icon(Icons.people), 
+                    SizedBox(width: 8), 
+                    Text('Manage Students')
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'csv_import',
+                child: Row(
+                  children: [
+                    Icon(Icons.upload_file), 
+                    SizedBox(width: 8), 
+                    Text('CSV Bulk Import')
+                  ],
                 ),
               ),
               const PopupMenuItem(
                 value: 'reports',
                 child: Row(
-                  children: [Icon(Icons.bar_chart), SizedBox(width: 8), Text('Reports & Export')],
+                  children: [
+                    Icon(Icons. bar_chart), 
+                    SizedBox(width: 8), 
+                    Text('Reports & Export')
+                  ],
                 ),
               ),
             ],
             onSelected: (value) {
               if (value == 'semesters') {
-                Navigator. push(context, MaterialPageRoute(builder: (context) => const ManageSemestersScreen()));
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const ManageSemestersScreen())
+                );
               } else if (value == 'students') {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageStudentsScreen()));
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const ManageStudentsScreen())
+                );
+              } else if (value == 'csv_import') {
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const CsvImportScreen())
+                );
               } else if (value == 'reports') {
-                if (courseProvider.courses. isNotEmpty) {
-                  final firstCourse = courseProvider. courses. first;
+                if (courseProvider.courses.isNotEmpty) {
+                  final firstCourse = courseProvider.courses. first;
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => ReportsScreen(
                         courseId: firstCourse.id,
-                        courseCode: firstCourse. code,
+                        courseCode: firstCourse.code,
                         courseName: firstCourse.name,
                       ),
                     ),
@@ -271,14 +323,14 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await authProvider.logout();
-              if (context.mounted) context. go('/login');
+              await authProvider. logout();
+              if (context.mounted) context.go('/login');
             },
           ),
         ],
       ),
       floatingActionButton: semesterProvider.currentSemester != null
-          ? FloatingActionButton.extended(
+          ? FloatingActionButton. extended(
               onPressed: _createCourseDialog,
               icon: const Icon(Icons.add),
               label: const Text('New Course'),
@@ -294,13 +346,13 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             : semesterProvider.currentSemester == null
                 ? Center(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment. center,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.calendar_today, size: 64, color: Colors.grey),
                         const SizedBox(height: 16),
                         const Text('No semester selected'),
                         const SizedBox(height: 16),
-                        ElevatedButton. icon(
+                        ElevatedButton.icon(
                           onPressed: () => Navigator.push(
                             context,
                             MaterialPageRoute(builder: (context) => const ManageSemestersScreen()),
@@ -327,10 +379,30 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                           mainAxisSpacing: 16,
                           childAspectRatio: 1.5,
                           children: [
-                            DashboardCard(title: 'Courses', value: totalCourses.toString(), icon: Icons.book, color: Colors.blue),
-                            DashboardCard(title: 'Groups', value: totalGroups.toString(), icon: Icons. groups, color: Colors.green),
-                            DashboardCard(title: 'Students', value: totalStudents.toString(), icon: Icons.people, color: Colors.orange),
-                            DashboardCard(title: 'Messages', value: _unreadMessageCount.toString(), icon: Icons.message, color: Colors.purple),
+                            DashboardCard(
+                              title: 'Courses', 
+                              value: totalCourses.toString(), 
+                              icon: Icons.book, 
+                              color: Colors. blue
+                            ),
+                            DashboardCard(
+                              title: 'Groups', 
+                              value: totalGroups.toString(), 
+                              icon: Icons. groups, 
+                              color: Colors.green
+                            ),
+                            DashboardCard(
+                              title: 'Students', 
+                              value: totalStudents.toString(), 
+                              icon: Icons.people, 
+                              color: Colors.orange
+                            ),
+                            DashboardCard(
+                              title: 'Messages', 
+                              value: _unreadMessageCount.toString(), 
+                              icon: Icons.message, 
+                              color: Colors.purple
+                            ),
                           ],
                         ),
                         const SizedBox(height: 32),
@@ -343,14 +415,28 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                           runSpacing: 12,
                           children: [
                             ElevatedButton.icon(
-                              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageSemestersScreen())),
+                              onPressed: () => Navigator.push(
+                                context, 
+                                MaterialPageRoute(builder: (context) => const ManageSemestersScreen())
+                              ),
                               icon: const Icon(Icons.calendar_today),
                               label: const Text('Manage Semesters'),
                             ),
                             ElevatedButton.icon(
-                              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageStudentsScreen())),
+                              onPressed: () => Navigator.push(
+                                context, 
+                                MaterialPageRoute(builder: (context) => const ManageStudentsScreen())
+                              ),
                               icon: const Icon(Icons.person_add),
                               label: const Text('Manage Students'),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.push(
+                                context, 
+                                MaterialPageRoute(builder: (context) => const CsvImportScreen())
+                              ),
+                              icon: const Icon(Icons.upload_file),
+                              label: const Text('CSV Import'),
                             ),
                           ],
                         ),
@@ -386,7 +472,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                           ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: courseProvider.courses. length,
+                            itemCount: courseProvider.courses.length,
                             itemBuilder: (context, index) {
                               final course = courseProvider.courses[index];
                               final colorIndex = course.code.hashCode. abs() % Colors.primaries.length;
@@ -396,14 +482,19 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                                   leading: CircleAvatar(
                                     backgroundColor: Colors.primaries[colorIndex],
                                     child: Text(
-                                      course.code. length >= 2 
+                                      course.code.length >= 2 
                                           ? course.code. substring(0, 2).toUpperCase() 
-                                          : course. code.toUpperCase(),
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                          : course.code.toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white, 
+                                        fontWeight: FontWeight.bold
+                                      ),
                                     ),
                                   ),
                                   title: Text(course.name),
-                                  subtitle: Text('${course.code} • ${course.groupCount} groups • ${course.studentCount} students'),
+                                  subtitle: Text(
+                                    '${course.code} • ${course.groupCount} groups • ${course.studentCount} students'
+                                  ),
                                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                                   onTap: () {
                                     courseProvider.setSelectedCourse(course);
