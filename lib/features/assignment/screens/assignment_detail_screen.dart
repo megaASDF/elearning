@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
 import '../../../core/models/assignment_model.dart';
 import '../../../core/models/submission_model.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -292,46 +296,135 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
   Future<void> _showSubmitDialog() async {
     final authProvider = context.read<AuthProvider>();
     final submissionProvider = context.read<SubmissionProvider>();
+    
+    List<PlatformFile> selectedFiles = [];
+    bool isSubmitting = false;
 
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Submit Assignment'),
-        content: const Text('For now, this is a placeholder. File upload will be added later.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await submissionProvider. submitAssignment(
-                  widget.assignmentId,
-                  authProvider.user?.id ?? '',
-                  authProvider.user?. displayName ?? 'Student',
-                  [], // Empty file list for now
-                );
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Assignment submitted! '),
-                      backgroundColor: Colors.green,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Submit Assignment'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Max ${_assignment!.maxFileSizeMB} MB per file'),
+                Text('Allowed: ${_assignment!.allowedFileFormats.join(", ")}'),
+                const SizedBox(height: 16),
+                
+                if (selectedFiles.isEmpty)
+                  const Text('No files selected', style: TextStyle(fontStyle: FontStyle.italic))
+                else
+                  ...selectedFiles.map((file) => ListTile(
+                    leading: const Icon(Icons.file_present),
+                    title: Text(file.name),
+                    subtitle: Text('${(file.size / 1024 / 1024).toStringAsFixed(2)} MB'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: isSubmitting ? null : () {
+                        setDialogState(() => selectedFiles.remove(file));
+                      },
                     ),
-                  );
-                }
-              } catch (e) {
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
-            },
-            child: const Text('Submit'),
+                  )),
+                
+                const SizedBox(height: 16),
+                
+                OutlinedButton.icon(
+                  onPressed: isSubmitting ? null : () async {
+                    final result = await FilePicker.platform.pickFiles(
+                      allowMultiple: true,
+                      type: FileType.custom,
+                      allowedExtensions: _assignment!.allowedFileFormats,
+                    );
+                    
+                    if (result != null) {
+                      for (var file in result.files) {
+                        if (file.size / 1024 / 1024 <= _assignment!.maxFileSizeMB) {
+                          setDialogState(() => selectedFiles.add(file));
+                        } else {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('${file.name} too large')),
+                            );
+                          }
+                        }
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.attach_file),
+                  label: const Text('Add Files'),
+                ),
+                
+                if (isSubmitting) ...[
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                  const Text('Uploading...'),
+                ],
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: (isSubmitting || selectedFiles.isEmpty) ? null : () async {
+                setDialogState(() => isSubmitting = true);
+                
+                try {
+                  List<String> fileUrls = [];
+                  final storage = FirebaseStorage.instance;
+                  
+                  for (var file in selectedFiles) {
+                    try {
+                      final path = 'submissions/${widget.assignmentId}/${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+                      final ref = storage.ref().child(path);
+                      
+                      if (kIsWeb && file.bytes != null) {
+                        await ref.putData(file.bytes!);
+                        fileUrls.add(await ref.getDownloadURL());
+                      } else if (file.path != null) {
+                        await ref.putFile(File(file.path!));
+                        fileUrls.add(await ref.getDownloadURL());
+                      } else {
+                        throw Exception('File ${file.name} has no valid data');
+                      }
+                    } catch (uploadError) {
+                      throw Exception('Failed to upload ${file.name}: $uploadError');
+                    }
+                  }
+                  
+                  await submissionProvider.submitAssignment(
+                    widget.assignmentId,
+                    authProvider.user?.id ?? '',
+                    authProvider.user?.displayName ?? 'Student',
+                    fileUrls,
+                  );
+                  
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Submitted ${selectedFiles.length} file(s)!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setDialogState(() => isSubmitting = false);
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        ),
       ),
     );
   }
