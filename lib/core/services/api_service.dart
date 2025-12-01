@@ -108,7 +108,12 @@ class ApiService {
   Future<Map<String, dynamic>> getCourseDetails(String courseId) async {
     final doc = await _firestore.collection('courses').doc(courseId).get();
     if (doc.exists) {
-      return {'id': doc.id, ...doc.data() ?? {}};
+      final data = doc.data() ?? {};
+      return {
+        'id': doc.id,
+        ...data,
+        'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+      };
     }
     return {};
   }
