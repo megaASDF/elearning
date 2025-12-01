@@ -378,16 +378,22 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                   final storage = FirebaseStorage.instance;
                   
                   for (var file in selectedFiles) {
-                    final path = 'submissions/${widget.assignmentId}/${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-                    final ref = storage.ref().child(path);
-                    
-                    if (kIsWeb && file.bytes != null) {
-                      await ref.putData(file.bytes!);
-                    } else if (file.path != null) {
-                      await ref.putFile(File(file.path!));
+                    try {
+                      final path = 'submissions/${widget.assignmentId}/${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+                      final ref = storage.ref().child(path);
+                      
+                      if (kIsWeb && file.bytes != null) {
+                        await ref.putData(file.bytes!);
+                        fileUrls.add(await ref.getDownloadURL());
+                      } else if (file.path != null) {
+                        await ref.putFile(File(file.path!));
+                        fileUrls.add(await ref.getDownloadURL());
+                      } else {
+                        throw Exception('File ${file.name} has no valid data');
+                      }
+                    } catch (uploadError) {
+                      throw Exception('Failed to upload ${file.name}: $uploadError');
                     }
-                    
-                    fileUrls.add(await ref.getDownloadURL());
                   }
                   
                   await submissionProvider.submitAssignment(

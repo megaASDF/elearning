@@ -14,7 +14,7 @@ class ApiService {
   ApiService() {
     _firestore.settings = const Settings(
       persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      cacheSizeBytes: 41943040, // 40 MB cache size limit
     );
   }
 
