@@ -8,6 +8,8 @@ import 'core/router/app_router.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/semester_provider.dart';
 import 'core/providers/course_provider.dart';
+import 'core/providers/group_provider.dart';
+import 'core/providers/student_provider.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/connectivity_service.dart';
 
@@ -16,7 +18,7 @@ void main() async {
   
   // Initialize Firebase
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+    options: DefaultFirebaseOptions. currentPlatform,
   );
   
   // Initialize default semester if none exists
@@ -35,18 +37,18 @@ void main() async {
 
 Future<void> _initializeDefaultData() async {
   try {
-    final firestore = FirebaseFirestore.instance;
+    final firestore = FirebaseFirestore. instance;
     
     // Check if default semester exists
     final semesterQuery = await firestore. collection('semesters').limit(1).get();
     
     if (semesterQuery.docs.isEmpty) {
       // Create default semester
-      await firestore. collection('semesters').add({
+      await firestore.collection('semesters').add({
         'code': 'HK1-2024',
         'name': 'Semester 1, 2024-2025',
         'startDate': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 30))),
-        'endDate': Timestamp.fromDate(DateTime. now().add(const Duration(days: 90))),
+        'endDate': Timestamp.fromDate(DateTime.now(). add(const Duration(days: 90))),
         'isCurrent': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -67,6 +69,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => SemesterProvider()),
         ChangeNotifierProvider(create: (_) => CourseProvider()),
+        ChangeNotifierProvider(create: (_) => GroupProvider()),
+        ChangeNotifierProvider(create: (_) => StudentProvider()),
         ChangeNotifierProvider. value(value: ConnectivityService.instance),
       ],
       child: Consumer<AuthProvider>(

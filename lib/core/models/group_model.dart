@@ -2,14 +2,18 @@ class GroupModel {
   final String id;
   final String courseId;
   final String name;
+  final String?  description;
+  final int?  maxStudents;
   final int studentCount;
-  final DateTime createdAt;
+  final String createdAt;
 
   GroupModel({
     required this.id,
-    required this.courseId,
-    required this.name,
-    required this.studentCount,
+    required this. courseId,
+    required this. name,
+    this.description,
+    this.maxStudents,
+    this.studentCount = 0,
     required this.createdAt,
   });
 
@@ -18,10 +22,10 @@ class GroupModel {
       id: json['id'] ?? '',
       courseId: json['courseId'] ?? '',
       name: json['name'] ?? '',
+      description: json['description'],
+      maxStudents: json['maxStudents'],
       studentCount: json['studentCount'] ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
+      createdAt: json['createdAt'] ?? DateTime.now().toIso8601String(),
     );
   }
 
@@ -30,8 +34,10 @@ class GroupModel {
       'id': id,
       'courseId': courseId,
       'name': name,
+      'description': description,
+      'maxStudents': maxStudents,
       'studentCount': studentCount,
-      'createdAt': createdAt.toIso8601String(),
+      'createdAt': createdAt,
     };
   }
 }
