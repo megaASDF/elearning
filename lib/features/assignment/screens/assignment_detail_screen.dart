@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../core/models/assignment_model.dart';
 import '../../../core/models/submission_model.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -292,48 +293,304 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
   Future<void> _showSubmitDialog() async {
     final authProvider = context.read<AuthProvider>();
     final submissionProvider = context.read<SubmissionProvider>();
+    
+    List<PlatformFile> selectedFiles = [];
+    bool isSubmitting = false;
+    String? errorMessage;
 
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Submit Assignment'),
-        content: const Text('For now, this is a placeholder. File upload will be added later.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await submissionProvider. submitAssignment(
-                  widget.assignmentId,
-                  authProvider.user?.id ?? '',
-                  authProvider.user?. displayName ?? 'Student',
-                  [], // Empty file list for now
-                );
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Assignment submitted! '),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                  );
-                }
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Helper function to format file size
+          String formatFileSize(int bytes) {
+            if (bytes < 1024) return '$bytes B';
+            if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+            return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+          }
+
+          // Validate files against assignment requirements
+          String? validateFiles(List<PlatformFile> files) {
+            if (files.isEmpty) return 'Please select at least one file';
+            
+            final allowedFormats = _assignment!.allowedFileFormats;
+            final maxSizeMB = _assignment!.maxFileSizeMB;
+            final maxSizeBytes = (maxSizeMB * 1024 * 1024).toInt();
+
+            for (final file in files) {
+              // Check file extension
+              final extension = file.extension?.toLowerCase() ?? '';
+              if (allowedFormats.isNotEmpty && !allowedFormats.contains(extension)) {
+                return 'File "${file.name}" has invalid format. Allowed: ${allowedFormats.join(", ")}';
               }
-            },
-            child: const Text('Submit'),
-          ),
-        ],
+              
+              // Check file size
+              if (file.size > maxSizeBytes) {
+                return 'File "${file.name}" (${formatFileSize(file.size)}) exceeds maximum size of ${maxSizeMB} MB';
+              }
+            }
+            return null;
+          }
+
+          Future<void> pickFiles() async {
+            try {
+              final hasAllowedFormats = _assignment!.allowedFileFormats.isNotEmpty;
+              final result = await FilePicker.platform.pickFiles(
+                allowMultiple: true,
+                type: hasAllowedFormats ? FileType.custom : FileType.any,
+                allowedExtensions: hasAllowedFormats
+                    ? _assignment!.allowedFileFormats
+                    : null,
+              );
+
+              if (result != null && result.files.isNotEmpty) {
+                setDialogState(() {
+                  selectedFiles = [...selectedFiles, ...result.files];
+                  errorMessage = validateFiles(selectedFiles);
+                });
+              }
+            } catch (e) {
+              setDialogState(() {
+                errorMessage = 'Error picking files: $e';
+              });
+            }
+          }
+
+          void removeFile(int index) {
+            setDialogState(() {
+              selectedFiles = List.from(selectedFiles)..removeAt(index);
+              errorMessage = selectedFiles.isEmpty ? null : validateFiles(selectedFiles);
+            });
+          }
+
+          Future<void> submitFiles() async {
+            final validationError = validateFiles(selectedFiles);
+            if (validationError != null) {
+              setDialogState(() => errorMessage = validationError);
+              return;
+            }
+
+            setDialogState(() {
+              isSubmitting = true;
+              errorMessage = null;
+            });
+
+            try {
+              // Note: In a production app, files would be uploaded to Firebase Storage first,
+              // then the download URLs would be stored. For this demo, we store file names
+              // as placeholders to demonstrate the file picker functionality.
+              final fileUrls = selectedFiles.map((f) => f.name).toList();
+              
+              await submissionProvider.submitAssignment(
+                widget.assignmentId,
+                authProvider.user?.id ?? '',
+                authProvider.user?.displayName ?? 'Student',
+                fileUrls,
+              );
+
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text('Assignment submitted with ${selectedFiles.length} file(s)!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            } catch (e) {
+              setDialogState(() {
+                isSubmitting = false;
+                errorMessage = 'Error submitting: $e';
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Submit Assignment'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // File requirements info
+                  Card(
+                    color: Colors.blue.shade50,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'File Requirements',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Allowed formats: ${_assignment!.allowedFileFormats.isEmpty ? "Any" : _assignment!.allowedFileFormats.join(", ")}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            'Max file size: ${_assignment!.maxFileSizeMB} MB',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // File picker button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: isSubmitting ? null : pickFiles,
+                      icon: const Icon(Icons.attach_file),
+                      label: const Text('Select Files'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Selected files list
+                  if (selectedFiles.isNotEmpty) ...[
+                    const Text(
+                      'Selected Files:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: selectedFiles.length,
+                        itemBuilder: (context, index) {
+                          final file = selectedFiles[index];
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 4),
+                            child: ListTile(
+                              dense: true,
+                              leading: Icon(
+                                _getFileIcon(file.extension ?? ''),
+                                color: Colors.blue,
+                              ),
+                              title: Text(
+                                file.name,
+                                style: const TextStyle(fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                formatFileSize(file.size),
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: isSubmitting ? null : () => removeFile(index),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ] else
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Icon(Icons.cloud_upload_outlined, size: 48, color: Colors.grey[400]),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No files selected',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  
+                  // Error message
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              errorMessage!,
+                              style: const TextStyle(color: Colors.red, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  // Upload progress
+                  if (isSubmitting) ...[
+                    const SizedBox(height: 16),
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 8),
+                    const Center(
+                      child: Text('Submitting...', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isSubmitting || selectedFiles.isEmpty ? null : submitFiles,
+                child: isSubmitting
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Submit'),
+              ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  IconData _getFileIcon(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return Icons.image;
+      case 'zip':
+      case 'rar':
+        return Icons.folder_zip;
+      default:
+        return Icons.insert_drive_file;
+    }
   }
 
   Future<void> _showGradeDialog(SubmissionModel submission) async {

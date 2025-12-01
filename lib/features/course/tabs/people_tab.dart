@@ -52,32 +52,98 @@ class _PeopleTabState extends State<PeopleTab> {
   // --- Create Group ---
   Future<void> _createGroupDialog() async {
     final nameCtrl = TextEditingController();
+    bool isCreating = false;
+    
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Group'),
-        content: TextField(
-          controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Group Name (e.g. Group 1)'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameCtrl.text.isNotEmpty) {
-                await ApiService().createGroup({
-                  'courseId': widget.courseId,
-                  'name': nameCtrl.text,
-                });
-                if (mounted) {
-                  Navigator.pop(context);
-                  _loadData(); // Refresh
-                }
-              }
-            },
-            child: const Text('Create'),
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create Group'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Group Name (e.g. Group 1)'),
+                enabled: !isCreating,
+              ),
+              if (isCreating) ...[
+                const SizedBox(height: 16),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 12),
+                    Text('Creating group...'),
+                  ],
+                ),
+              ],
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isCreating ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isCreating
+                  ? null
+                  : () async {
+                      if (nameCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a group name'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      setDialogState(() => isCreating = true);
+                      
+                      try {
+                        await ApiService().createGroup({
+                          'courseId': widget.courseId,
+                          'name': nameCtrl.text.trim(),
+                        });
+                        
+                        if (mounted) {
+                          Navigator.pop(dialogContext);
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            const SnackBar(
+                              content: Text('Group created successfully'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          _loadData(); // Refresh
+                        }
+                      } catch (e) {
+                        setDialogState(() => isCreating = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            SnackBar(
+                              content: Text('Error creating group: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: isCreating
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Create'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -12,25 +12,33 @@ class ApiService {
   
   String?  _token;
   
-  // --- In-Memory Database (Mock) ---
-  final List<Map<String, dynamic>> _users = [];
-  final List<Map<String, dynamic>> _semesters = [];
-  final List<Map<String, dynamic>> _courses = [];
-  final List<Map<String, dynamic>> _groups = [];
-  final List<Map<String, dynamic>> _enrollments = []; // Links students to groups
-  final List<Map<String, dynamic>> _assignments = [];
-  final List<Map<String, dynamic>> _submissions = [];
-  final List<Map<String, dynamic>> _quizzes = [];
-  final List<Map<String, dynamic>> _quizAttempts = [];
-  final List<Map<String, dynamic>> _materials = [];
-  final List<Map<String, dynamic>> _announcements = [];
-  final List<Map<String, dynamic>> _forumTopics = [];
-  final List<Map<String, dynamic>> _forumReplies = [];
-  final List<Map<String, dynamic>> _notifications = [];
-  final List<Map<String, dynamic>> _conversations = [];
-  final List<Map<String, dynamic>> _messages = [];
+  // --- In-Memory Database (Mock) - Static to persist across instances ---
+  static final List<Map<String, dynamic>> _users = [];
+  static final List<Map<String, dynamic>> _semesters = [];
+  static final List<Map<String, dynamic>> _courses = [];
+  static final List<Map<String, dynamic>> _groups = [];
+  static final List<Map<String, dynamic>> _enrollments = []; // Links students to groups
+  static final List<Map<String, dynamic>> _assignments = [];
+  static final List<Map<String, dynamic>> _submissions = [];
+  static final List<Map<String, dynamic>> _quizzes = [];
+  static final List<Map<String, dynamic>> _quizAttempts = [];
+  static final List<Map<String, dynamic>> _materials = [];
+  static final List<Map<String, dynamic>> _announcements = [];
+  static final List<Map<String, dynamic>> _forumTopics = [];
+  static final List<Map<String, dynamic>> _forumReplies = [];
+  static final List<Map<String, dynamic>> _notifications = [];
+  static final List<Map<String, dynamic>> _conversations = [];
+  static final List<Map<String, dynamic>> _messages = [];
+  static bool _isInitialized = false;
+
+  ApiService() {
+    _initializeMockData();
+  }
 
   void _initializeMockData() {
+    if (_isInitialized) return;
+    _isInitialized = true;
+    
     // Admin
     _users.add({
       'id': '1',
