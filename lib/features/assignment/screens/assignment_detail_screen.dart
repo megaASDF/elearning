@@ -377,7 +377,9 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
             });
 
             try {
-              // For now, we'll submit with file names as URLs (in a real app, you'd upload to storage first)
+              // Note: In a production app, files would be uploaded to Firebase Storage first,
+              // then the download URLs would be stored. For this demo, we store file names
+              // as placeholders to demonstrate the file picker functionality.
               final fileUrls = selectedFiles.map((f) => f.name).toList();
               
               await submissionProvider.submitAssignment(
@@ -389,7 +391,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
 
               if (ctx.mounted) {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(this.context).showSnackBar(
+                ScaffoldMessenger.of(ctx).showSnackBar(
                   SnackBar(
                     content: Text('Assignment submitted with ${selectedFiles.length} file(s)!'),
                     backgroundColor: Colors.green,

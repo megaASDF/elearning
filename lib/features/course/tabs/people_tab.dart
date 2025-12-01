@@ -95,7 +95,7 @@ class _PeopleTabState extends State<PeopleTab> {
                   ? null
                   : () async {
                       if (nameCtrl.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
                           const SnackBar(
                             content: Text('Please enter a group name'),
                             backgroundColor: Colors.orange,
@@ -114,7 +114,7 @@ class _PeopleTabState extends State<PeopleTab> {
                         
                         if (mounted) {
                           Navigator.pop(dialogContext);
-                          ScaffoldMessenger.of(this.context).showSnackBar(
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
                             const SnackBar(
                               content: Text('Group created successfully'),
                               backgroundColor: Colors.green,
@@ -125,7 +125,7 @@ class _PeopleTabState extends State<PeopleTab> {
                       } catch (e) {
                         setDialogState(() => isCreating = false);
                         if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
                             SnackBar(
                               content: Text('Error creating group: $e'),
                               backgroundColor: Colors.red,
