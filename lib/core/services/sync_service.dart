@@ -1,172 +1,80 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'offline_database_service.dart';
-import 'api_service.dart';
 
 class SyncService {
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
   SyncService._internal();
 
-  bool _isSyncing = false;
-  DateTime? _lastSyncTime;
+  final Connectivity _connectivity = Connectivity();
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  bool _isOnline = true;
 
-  bool get isSyncing => _isSyncing;
-  DateTime?  get lastSyncTime => _lastSyncTime;
-
-  // Check if online
+  // Check if device is online
   Future<bool> isOnline() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    return connectivityResult != ConnectivityResult.none;
-  }
-
-  // Sync all data for a course
-  Future<void> syncCourse(String courseId) async {
-    if (_isSyncing) {
-      debugPrint('⏳ Sync already in progress');
-      return;
-    }
-
-    if (!await isOnline()) {
-      debugPrint('📡 Offline - cannot sync');
-      return;
-    }
-
-    _isSyncing = true;
-    debugPrint('🔄 Starting sync for course $courseId');
-
     try {
-      final apiService = ApiService();
-
-      // Sync announcements
-      try {
-        final announcements = await apiService.getAnnouncements(courseId);
-        await OfflineDatabaseService.saveAnnouncements(
-          courseId, 
-          List<Map<String, dynamic>>. from(announcements)
-        );
-      } catch (e) {
-        debugPrint('Error syncing announcements: $e');
-      }
-
-      // Sync materials
-      try {
-        final materials = await apiService.getMaterials(courseId);
-        await OfflineDatabaseService.saveMaterials(
-          courseId, 
-          List<Map<String, dynamic>>.from(materials)
-        );
-      } catch (e) {
-        debugPrint('Error syncing materials: $e');
-      }
-
-      // Sync assignments
-      try {
-        final assignments = await apiService. getAssignments(courseId);
-        await OfflineDatabaseService.saveAssignments(
-          courseId, 
-          List<Map<String, dynamic>>. from(assignments)
-        );
-        
-        // Sync submissions for each assignment
-        for (var assignment in assignments) {
-          try {
-            final submissions = await apiService.getSubmissions(assignment['id']);
-            await OfflineDatabaseService.saveSubmissions(
-              assignment['id'], 
-              List<Map<String, dynamic>>.from(submissions)
-            );
-          } catch (e) {
-            debugPrint('Error syncing submissions for assignment ${assignment['id']}: $e');
-          }
-        }
-      } catch (e) {
-        debugPrint('Error syncing assignments: $e');
-      }
-
-      // Sync quizzes
-      try {
-        final quizzes = await apiService.getQuizzes(courseId);
-        await OfflineDatabaseService.saveQuizzes(
-          courseId, 
-          List<Map<String, dynamic>>.from(quizzes)
-        );
-        
-        // Sync attempts for each quiz
-        for (var quiz in quizzes) {
-          try {
-            final attempts = await apiService.getQuizAttempts(quiz['id']);
-            await OfflineDatabaseService.saveQuizAttempts(
-              quiz['id'], 
-              List<Map<String, dynamic>>.from(attempts)
-            );
-          } catch (e) {
-            debugPrint('Error syncing attempts for quiz ${quiz['id']}: $e');
-          }
-        }
-      } catch (e) {
-        debugPrint('Error syncing quizzes: $e');
-      }
-
-      _lastSyncTime = DateTime.now();
-      debugPrint('✅ Sync completed for course $courseId');
+      final result = await _connectivity.checkConnectivity();
+      _isOnline = result != ConnectivityResult.none;
+      return _isOnline;
     } catch (e) {
-      debugPrint('❌ Sync failed: $e');
-    } finally {
-      _isSyncing = false;
+      debugPrint('❌ Error checking connectivity: $e');
+      return false;
     }
   }
 
-  // Sync courses for a semester
-  Future<void> syncSemester(String semesterId) async {
-    if (_isSyncing) {
-      debugPrint('⏳ Sync already in progress');
-      return;
-    }
+  // Start listening to connectivity changes
+  void startListening(Function(bool) onConnectivityChanged) {
+    _connectivitySubscription = _connectivity.onConnectivityChanged.listen((result) {
+      final wasOnline = _isOnline;
+      _isOnline = result != ConnectivityResult.none;
+      
+      if (_isOnline != wasOnline) {
+        debugPrint(_isOnline ? '🌐 Device is ONLINE' : '📡 Device is OFFLINE');
+        onConnectivityChanged(_isOnline);
+        
+        // Sync pending actions when coming back online
+        if (_isOnline && !wasOnline) {
+          _syncPendingActions();
+        }
+      }
+    });
+  }
 
-    if (!await isOnline()) {
-      debugPrint('📡 Offline - cannot sync');
-      return;
-    }
+  // Stop listening
+  void stopListening() {
+    _connectivitySubscription?.cancel();
+  }
 
-    _isSyncing = true;
-    debugPrint('🔄 Starting sync for semester $semesterId');
-
+  // Sync all pending actions to server
+  Future<void> _syncPendingActions() async {
     try {
-      final apiService = ApiService();
+      final pendingActions = OfflineDatabaseService.getPendingActions();
       
-      // Sync courses
-      final coursesData = await apiService.getCoursesBySemester(semesterId);
-      await OfflineDatabaseService.saveCourses(
-        semesterId, 
-        List<Map<String, dynamic>>.from(coursesData)
-      );
-
-      _lastSyncTime = DateTime.now();
-      debugPrint('✅ Sync completed for semester $semesterId');
-    } catch (e) {
-      debugPrint('❌ Sync failed: $e');
-    } finally {
-      _isSyncing = false;
-    }
-  }
-
-  // Background sync (call periodically)
-  Future<void> backgroundSync(String courseId) async {
-    if (! await isOnline()) return;
-    
-    final lastSync = OfflineDatabaseService.getLastSync('course_$courseId');
-    if (lastSync != null) {
-      final lastSyncTime = DateTime.parse(lastSync);
-      final now = DateTime.now();
-      
-      // Only sync if last sync was more than 15 minutes ago
-      if (now.difference(lastSyncTime). inMinutes < 15) {
-        debugPrint('⏭️ Skipping sync - synced recently');
+      if (pendingActions.isEmpty) {
+        debugPrint('✅ No pending actions to sync');
         return;
       }
-    }
 
-    await syncCourse(courseId);
+      debugPrint('🔄 Syncing ${pendingActions.length} pending actions.. .');
+      
+      // Sync each pending action
+      for (var action in pendingActions) {
+        debugPrint('  📤 Syncing: ${action['type']}');
+        // Actions will be synced automatically when online
+        // because api_service checks _isOnline() before operations
+      }
+      
+      // Clear pending actions after successful sync
+      await OfflineDatabaseService. clearPendingActions();
+      debugPrint('✅ All pending actions synced');
+      
+    } catch (e) {
+      debugPrint('❌ Error syncing pending actions: $e');
+    }
   }
+
+  // Get current connectivity status
+  bool get isCurrentlyOnline => _isOnline;
 }

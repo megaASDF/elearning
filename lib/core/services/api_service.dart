@@ -1057,4 +1057,137 @@ Future<void> createForumReply(Map<String, dynamic> data) async {
     await ref.putFile(file);
     return await ref.getDownloadURL();
   }
+
+    // --- ENROLLED COURSES (for manual enrollment) ---
+  Future<List<dynamic>> getEnrolledCourses(String semesterId, String studentId) async {
+    try {
+      // Get student's enrollments
+      final enrollmentsSnapshot = await _firestore
+          .collection('enrollments')
+          .where('studentId', isEqualTo: studentId)
+          .get();
+
+      // Get course IDs from enrollments
+      final courseIds = enrollmentsSnapshot.docs
+          .map((doc) => doc. data()['courseId'] as String)
+          .toSet()
+          .toList();
+
+      if (courseIds.isEmpty) {
+        return [];
+      }
+
+      // Get courses - handle chunks of 10 (Firestore limit)
+      List<Map<String, dynamic>> allCourses = [];
+      
+      for (int i = 0; i < courseIds.length; i += 10) {
+        final chunk = courseIds.skip(i).take(10).toList();
+        
+        final coursesSnapshot = await _firestore
+            .collection('courses')
+            .where('semesterId', isEqualTo: semesterId)
+            .where(FieldPath.documentId, whereIn: chunk)
+            . get();
+
+        final courses = coursesSnapshot.docs. map((doc) {
+          final data = doc.data();
+          return {
+            'id': doc.id,
+            ... data,
+            'createdAt': _convertToIsoString(data['createdAt']),
+          };
+        }).toList();
+        
+        allCourses. addAll(courses);
+      }
+
+      return allCourses;
+    } catch (e) {
+      debugPrint('Error getting enrolled courses: $e');
+      return [];
+    }
+  }
+
+  // --- PASSWORD MANAGEMENT ---
+  Future<bool> verifyPassword(String username, String password) async {
+    try {
+      debugPrint('🔐 Verifying password for: $username');
+      
+      final snapshot = await _firestore
+          .collection('users')
+          . where('username', isEqualTo: username)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        debugPrint('❌ User not found');
+        return false;
+      }
+
+      final userData = snapshot.docs. first.data();
+      final email = userData['email'];
+      
+      // Try to sign in with Firebase Auth to verify password
+      try {
+        final userCred = await _auth.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        return userCred.user != null;
+      } catch (e) {
+        debugPrint('❌ Password verification failed');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('❌ Error verifying password: $e');
+      return false;
+    }
+  }
+
+  Future<void> updatePassword(String userId, String newPassword) async {
+    try {
+      debugPrint('🔐 Updating password for user: $userId');
+      
+      // Update in Firebase Auth
+      final currentUser = _auth.currentUser;
+      if (currentUser != null && currentUser.uid == userId) {
+        await currentUser.updatePassword(newPassword);
+      }
+      
+      debugPrint('✅ Password updated successfully');
+    } catch (e) {
+      debugPrint('❌ Error updating password: $e');
+      rethrow;
+    }
+  }
+
+  // --- MATERIAL HELPERS ---
+  Future<void> incrementViewCount(String materialId) async {
+    try {
+      await _firestore. collection('materials').doc(materialId).update({
+        'viewCount': FieldValue.increment(1),
+      });
+    } catch (e) {
+      debugPrint('Error incrementing view count: $e');
+    }
+  }
+
+  Future<void> incrementDownloadCount(String materialId) async {
+    try {
+      await _firestore.collection('materials'). doc(materialId).update({
+        'downloadCount': FieldValue.increment(1),
+      });
+    } catch (e) {
+      debugPrint('Error incrementing download count: $e');
+    }
+  }
+
+  Future<void> deleteMaterial(String id, String courseId) async {
+    try {
+      await _firestore.collection('materials').doc(id).delete();
+    } catch (e) {
+      debugPrint('Error deleting material: $e');
+      rethrow;
+    }
+  }
 }

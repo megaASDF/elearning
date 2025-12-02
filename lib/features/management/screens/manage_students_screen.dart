@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/student_provider.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../profile/screens/student_profile_view_screen.dart';
+import '../../profile/screens/student_profile_edit_screen.dart';
 
 class ManageStudentsScreen extends StatefulWidget {
   const ManageStudentsScreen({super.key});
@@ -16,7 +16,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
   void initState() {
     super. initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<StudentProvider>().loadAllStudents();
+      context.read<StudentProvider>(). loadAllStudents();
     });
   }
 
@@ -84,14 +84,14 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                 const SizedBox(height: 8),
                 const Text(
                   'Password must be at least 6 characters',
-                  style: TextStyle(fontSize: 12, color: Colors. grey),
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
+              onPressed: () => Navigator. pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -100,7 +100,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                     nameController.text. trim().isEmpty ||
                     emailController.text.trim().isEmpty ||
                     passwordController.text. isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  ScaffoldMessenger.of(context). showSnackBar(
                     const SnackBar(
                       content: Text('Please fill all fields'),
                       backgroundColor: Colors.orange,
@@ -123,7 +123,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter a valid email'),
-                      backgroundColor: Colors.orange,
+                      backgroundColor: Colors. orange,
                     ),
                   );
                   return;
@@ -135,7 +135,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                   final currentUserEmail = authProvider.user?.email;
                   
                   await context.read<StudentProvider>().createStudent(
-                    usernameController. text. trim(),
+                    usernameController.text.trim(),
                     emailController.text.trim(),
                     nameController.text.trim(),
                     passwordController.text,
@@ -195,7 +195,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
             onPressed: () async {
               try {
                 await context.read<AuthProvider>().login(
-                  'admin', // or use stored username
+                  'admin',
                   passwordController.text,
                 );
                 
@@ -233,7 +233,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
         title: const Text('Manage Students'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons. refresh),
             onPressed: () {
               context.read<StudentProvider>().loadAllStudents();
             },
@@ -247,7 +247,7 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
       ),
       body: Consumer<StudentProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoading) {
+          if (provider. isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -283,46 +283,73 @@ class _ManageStudentsScreenState extends State<ManageStudentsScreen> {
                   leading: CircleAvatar(
                     backgroundColor: Colors.blue,
                     child: Text(
-                      (student. displayName. isNotEmpty ? student.displayName[0] : 'S'). toUpperCase(),
+                      (student.displayName.isNotEmpty ? student.displayName[0] : 'S'). toUpperCase(),
                       style: const TextStyle(color: Colors.white),
                     ),
                   ),
                   title: Text(student.displayName),
-                  subtitle: Text('${student.username} • ${student. email}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Delete Student'),
-                          content: Text('Are you sure you want to delete ${student.displayName}?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: TextButton.styleFrom(foregroundColor: Colors.red),
-                              child: const Text('Delete'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true && mounted) {
-                        await provider.deleteStudent(student.id);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Student deleted'),
-                              backgroundColor: Colors.green,
+                  subtitle: Text('${student.username} • ${student.email}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // EDIT BUTTON - NEW! 
+                      IconButton(
+                        icon: const Icon(Icons. edit, color: Colors.blue),
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => StudentProfileEditScreen(
+                                studentId: student.id,
+                              ),
                             ),
                           );
-                        }
-                      }
-                    },
+                          
+                          // Reload students if changes were made
+                          if (result == true && mounted) {
+                            provider. loadAllStudents();
+                          }
+                        },
+                        tooltip: 'Edit Student',
+                      ),
+                      // DELETE BUTTON
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors. red),
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Delete Student'),
+                              content: Text('Are you sure you want to delete ${student.displayName}?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator. pop(context, true),
+                                  style: TextButton.styleFrom(foregroundColor: Colors. red),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirm == true && mounted) {
+                            await provider.deleteStudent(student.id);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Student deleted'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        tooltip: 'Delete Student',
+                      ),
+                    ],
                   ),
                 ),
               );
