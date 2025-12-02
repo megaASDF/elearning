@@ -502,6 +502,27 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>?> getQuizById(String quizId) async {
+  try {
+    final doc = await _firestore.collection('quizzes'). doc(quizId).get();
+    if (doc.exists) {
+      final data = doc.data() ??  {};
+      return {
+        'id': doc.id,
+        ... data,
+        'openTime': _convertToIsoString(data['openTime']),
+        'closeTime': _convertToIsoString(data['closeTime']),
+        'createdAt': _convertToIsoString(data['createdAt']),
+        'updatedAt': _convertToIsoString(data['updatedAt']),
+      };
+    }
+    return null;
+  } catch (e) {
+    debugPrint('Error getting quiz by ID: $e');
+    return null;
+  }
+}
+
   Future<Map<String, dynamic>> createQuiz(Map<String, dynamic> data) async {
     final docRef = await _firestore. collection('quizzes').add({
       'courseId': data['courseId'],
@@ -535,57 +556,108 @@ class ApiService {
   }
 
   // --- Quiz Attempts ---
-  Future<List<dynamic>> getQuizAttempts(String quizId) async {
-    try {
-      if (await _isOnline()) {
-        final snapshot = await _firestore
-            .collection('quizAttempts')
-            .where('quizId', isEqualTo: quizId)
-            .get();
-        
-        final attempts = snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
-        
-        // Save to offline cache
-        await OfflineDatabaseService.saveQuizAttempts(quizId, attempts);
-        
-        return attempts;
-      } else {
-        // Return offline data
-        debugPrint('📡 Offline - loading quiz attempts from cache');
-        final cachedData = OfflineDatabaseService.getQuizAttempts(quizId);
-        return cachedData ?? [];
-      }
-    } catch (e) {
-      debugPrint('❌ Error getting quiz attempts: $e');
-      final cachedData = OfflineDatabaseService. getQuizAttempts(quizId);
-      return cachedData ?? [];
-    }
-  }
+Future<List<dynamic>> getQuizAttempts(String quizId) async {
+  try {
+    final snapshot = await _firestore
+        . collection('quizAttempts')
+        . where('quizId', isEqualTo: quizId)
+        .orderBy('startedAt', descending: true)
+        .get();
 
-  Future<Map<String, dynamic>> startQuizAttempt(String quizId, String studentId, String studentName) async {
-    final docRef = await _firestore.collection('quizAttempts').add({
+    return snapshot.docs.map((doc) {
+      final data = doc. data();
+      return {
+        'id': doc.id,
+        ... data,
+        'startedAt': _convertToIsoString(data['startedAt']),
+        'submittedAt': _convertToIsoString(data['submittedAt']),
+      };
+    }).toList();
+  } catch (e) {
+    debugPrint('❌ Error getting quiz attempts: $e');
+    return [];
+  }
+}
+
+Future<Map<String, dynamic>> startQuizAttempt(
+  String quizId,
+  String studentId,
+  String studentName,
+) async {
+  try {
+    final docRef = await _firestore. collection('quizAttempts'). add({
       'quizId': quizId,
       'studentId': studentId,
       'studentName': studentName,
-      'startedAt': FieldValue.serverTimestamp(),
-      'attemptNumber': 1,
+      'attemptNumber': 1, // Calculate properly in production
       'answers': {},
       'score': 0.0,
+      'startedAt': FieldValue.serverTimestamp(),
+      'submittedAt': null,
     });
-    final doc = await docRef.get();
-    return {'id': doc.id, ... doc.data() ?? {}};
-  }
 
-  Future<Map<String, dynamic>> submitQuizAttempt(String attemptId, Map<String, int> answers) async {
-    final score = (answers. length * 10.0);
-    await _firestore.collection('quizAttempts'). doc(attemptId).update({
+    final doc = await docRef.get();
+    final data = doc.data() ?? {};
+    
+    return {
+      'id': doc.id,
+      ...data,
+      'startedAt': _convertToIsoString(data['startedAt']),
+      'submittedAt': null,
+    };
+  } catch (e) {
+    debugPrint('❌ Error starting quiz attempt: $e');
+    rethrow;
+  }
+}
+
+
+Future<Map<String, dynamic>?> getForumTopicById(String topicId) async {
+  try {
+    final doc = await _firestore.collection('forumTopics').doc(topicId).get();
+    if (doc.exists) {
+      final data = doc.data() ??  {};
+      return {
+        'id': doc.id,
+        ... data,
+        'createdAt': _convertToIsoString(data['createdAt']),
+        'updatedAt': _convertToIsoString(data['updatedAt']),
+      };
+    }
+    return null;
+  } catch (e) {
+    debugPrint('Error getting forum topic: $e');
+    return null;
+  }
+}
+
+Future<void> incrementForumTopicView(String topicId) async {
+  try {
+    await _firestore. collection('forumTopics').doc(topicId).update({
+      'viewCount': FieldValue.increment(1),
+    });
+  } catch (e) {
+    debugPrint('Error incrementing view count: $e');
+  }
+}
+
+
+Future<void> submitQuizAttempt(
+  String attemptId,
+  Map<String, int> answers,
+) async {
+  try {
+    await _firestore.collection('quizAttempts').doc(attemptId).update({
       'answers': answers,
       'submittedAt': FieldValue. serverTimestamp(),
-      'score': score,
     });
-    final doc = await _firestore. collection('quizAttempts'). doc(attemptId).get();
-    return {'id': doc. id, ...doc.data() ??  {}};
+    
+    debugPrint('✅ Quiz attempt submitted');
+  } catch (e) {
+    debugPrint('❌ Error submitting quiz attempt: $e');
+    rethrow;
   }
+}
 
   // --- Materials ---
   Future<List<dynamic>> getMaterials(String courseId) async {
@@ -706,14 +778,30 @@ class ApiService {
   }
 
   // --- Forum ---
-  Future<List<dynamic>> getForumTopics(String courseId) async {
+Future<List<dynamic>> getForumTopics(String courseId) async {
+  try {
     final snapshot = await _firestore
         .collection('forumTopics')
         .where('courseId', isEqualTo: courseId)
         .orderBy('createdAt', descending: true)
         .get();
-    return snapshot.docs.map((doc) => {'id': doc.id, ... doc.data()}).toList();
+    
+    return snapshot.docs. map((doc) {
+      final data = doc.data();
+      return {
+        'id': doc.id,
+        ... data,
+        'createdAt': _convertToIsoString(data['createdAt']),
+        'updatedAt': _convertToIsoString(data['updatedAt']),
+      };
+    }).toList();
+  } catch (e) {
+    debugPrint('🔥🔥🔥 FORUM TOPICS ERROR 🔥🔥🔥');
+    debugPrint('Error: $e');
+    debugPrint('🔥🔥🔥 END ERROR 🔥🔥🔥\n');
+    rethrow;
   }
+}
 
   Future<Map<String, dynamic>> createForumTopic(Map<String, dynamic> data) async {
     final docRef = await _firestore.collection('forumTopics'). add({
@@ -732,37 +820,59 @@ class ApiService {
     return {'id': doc.id, ...doc. data() ?? {}};
   }
 
-  Future<List<dynamic>> getForumReplies(String topicId) async {
+Future<List<Map<String, dynamic>>> getForumReplies(String topicId) async {
+  try {
     final snapshot = await _firestore
         .collection('forumReplies')
         .where('topicId', isEqualTo: topicId)
         .orderBy('createdAt')
         .get();
-    return snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
+    
+    final replies = snapshot.docs.map((doc) {
+      final data = doc.data();
+      debugPrint('📬 Reply from: ${data['authorName']}'); // Debug log
+      return {
+        'id': doc.id,
+        ... data,
+        'createdAt': _convertToIsoString(data['createdAt']),
+      };
+    }).toList();
+    
+    debugPrint('✅ Loaded ${replies.length} replies');
+    return replies;
+  } catch (e) {
+    debugPrint('❌ Error getting forum replies: $e');
+    return [];
   }
+}
 
-  Future<Map<String, dynamic>> createForumReply(String topicId, Map<String, dynamic> data) async {
-    final docRef = await _firestore.collection('forumReplies').add({
-      'topicId': topicId,
+
+
+
+Future<void> createForumReply(Map<String, dynamic> data) async {
+  try {
+    debugPrint('📝 Creating forum reply with author: ${data['authorName']}');
+    
+    await _firestore. collection('forumReplies').add({
+      'topicId': data['topicId'],
       'content': data['content'],
       'authorId': data['authorId'],
       'authorName': data['authorName'],
       'createdAt': FieldValue.serverTimestamp(),
     });
     
-    // Update topic reply count
-    final topicDoc = await _firestore.collection('forumTopics').doc(topicId).get();
-    if (topicDoc.exists) {
-      final currentCount = topicDoc.data()?['replyCount'] ?? 0;
-      await _firestore.collection('forumTopics').doc(topicId).update({
-        'replyCount': currentCount + 1,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-    
-    final doc = await docRef.get();
-    return {'id': doc. id, ...doc.data() ??  {}};
+    // Increment reply count
+    await _firestore
+        .collection('forumTopics')
+        .doc(data['topicId'])
+        .update({'replyCount': FieldValue.increment(1)});
+        
+    debugPrint('✅ Forum reply created by: ${data['authorName']}');
+  } catch (e) {
+    debugPrint('❌ Error creating forum reply: $e');
+    rethrow;
   }
+}
 
   // --- Notifications ---
   Future<List<dynamic>> getNotifications(String userId) async {

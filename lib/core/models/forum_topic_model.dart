@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ForumTopicModel {
   final String id;
   final String courseId;
@@ -5,9 +7,9 @@ class ForumTopicModel {
   final String content;
   final String authorId;
   final String authorName;
-  final List<String> attachments;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final List<String> groupIds;
+  final String createdAt;
+  final String updatedAt;
   final int replyCount;
   final int viewCount;
 
@@ -18,7 +20,7 @@ class ForumTopicModel {
     required this.content,
     required this.authorId,
     required this.authorName,
-    required this.attachments,
+    required this.groupIds,
     required this.createdAt,
     required this.updatedAt,
     required this.replyCount,
@@ -27,18 +29,31 @@ class ForumTopicModel {
 
   factory ForumTopicModel.fromJson(Map<String, dynamic> json) {
     return ForumTopicModel(
-      id: json['id'] ?? json['_id'] ?? '',
+      id: json['id'] ??  '',
       courseId: json['courseId'] ?? '',
       title: json['title'] ?? '',
-      content: json['content'] ?? '',
+      content: json['content'] ??  '',
       authorId: json['authorId'] ?? '',
-      authorName: json['authorName'] ?? '',
-      attachments: List<String>.from(json['attachments'] ?? []),
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      authorName: json['authorName'] ??  '',
+      groupIds: (json['groupIds'] as List?)?.cast<String>() ?? [],
+      createdAt: _convertToIsoString(json['createdAt']),
+      updatedAt: _convertToIsoString(json['updatedAt']),
       replyCount: json['replyCount'] ?? 0,
-      viewCount: json['viewCount'] ?? 0,
+      viewCount: json['viewCount'] ??  0,
     );
+  }
+
+  // Helper method to convert Timestamp to ISO String
+  static String _convertToIsoString(dynamic value) {
+    if (value == null) {
+      return DateTime.now().toIso8601String();
+    } else if (value is Timestamp) {
+      return value.toDate().toIso8601String();
+    } else if (value is String) {
+      return value;
+    } else {
+      return DateTime.now().toIso8601String();
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -49,9 +64,9 @@ class ForumTopicModel {
       'content': content,
       'authorId': authorId,
       'authorName': authorName,
-      'attachments': attachments,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
+      'groupIds': groupIds,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
       'replyCount': replyCount,
       'viewCount': viewCount,
     };

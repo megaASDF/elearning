@@ -31,12 +31,22 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Future<void> _loadData() async {
+    if (! mounted) return;
+    
+    final authProvider = context.read<AuthProvider>();
     final semesterProvider = context.read<SemesterProvider>();
-    await semesterProvider.loadSemesters();
+    final courseProvider = context.read<CourseProvider>();
+    
+    await semesterProvider. loadSemesters();
 
+    if (! mounted) return;
     if (semesterProvider.currentSemester != null) {
-      final courseProvider = context.read<CourseProvider>();
-      await courseProvider.loadCourses(semesterProvider.currentSemester!.id);
+      // Load only enrolled courses for this student
+      final studentId = authProvider.user?.id ?? '';
+      await courseProvider. loadEnrolledCourses(
+        semesterProvider.currentSemester!.id,
+        studentId,
+      );
     }
   }
 
@@ -47,14 +57,14 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
       // Load notifications
       final notifications =
-          await apiService.getNotifications(authProvider.user?.id ?? '');
+          await apiService.getNotifications(authProvider.user?. id ?? '');
       final unreadNotifications =
-          notifications.where((n) => !(n['isRead'] ?? true)).length;
+          notifications. where((n) => !(n['isRead'] ?? true)).length;
 
       // Load messages
       final conversations =
           await apiService.getConversations(authProvider.user?.id ?? '');
-      final unreadMessages = conversations.fold<int>(
+      final unreadMessages = conversations. fold<int>(
           0, (sum, conv) => sum + (conv['unreadCount'] as int? ?? 0));
 
       if (mounted) {
@@ -64,13 +74,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         });
       }
     } catch (e) {
-      // Silent fail - counts will remain 0
+      debugPrint('Error loading unread counts: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+    final authProvider = context. watch<AuthProvider>();
     final semesterProvider = context.watch<SemesterProvider>();
     final courseProvider = context.watch<CourseProvider>();
 
@@ -84,7 +94,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               semesters: semesterProvider.semesters,
               onChanged: (semester) async {
                 semesterProvider.setCurrentSemester(semester);
-                await courseProvider.loadCourses(semester.id);
+                final studentId = authProvider.user?. id ?? '';
+                await courseProvider.loadEnrolledCourses(semester.id, studentId);
               },
             ),
           // Notifications Icon
@@ -129,6 +140,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               );
             },
           ),
+          // Dashboard Icon
           IconButton(
             icon: const Icon(Icons.dashboard),
             onPressed: () {
@@ -140,14 +152,36 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               );
             },
           ),
-
           // Logout Icon
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await authProvider.logout();
-              if (context.mounted) {
-                context.go('/login');
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Logout'),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors. red,
+                      ),
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true && mounted) {
+                await authProvider. logout();
+                if (context.mounted) {
+                  context.go('/login');
+                }
               }
             },
           ),
@@ -162,17 +196,32 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             ? const Center(child: CircularProgressIndicator())
             : courseProvider.courses.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.school_outlined,
-                            size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No courses enrolled',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
+                    child: Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.school_outlined,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No courses enrolled',
+                            style: Theme. of(context).textTheme. titleLarge,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Contact your instructor to be enrolled in courses',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : GridView.builder(

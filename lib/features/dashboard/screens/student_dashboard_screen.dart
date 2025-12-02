@@ -31,12 +31,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.user?.id ??  '';
+      final userId = authProvider.user?.id ?? '';
       final apiService = ApiService();
 
       // Get all courses for current semester
       // For now, we'll use a mock approach - you'd need to get actual enrolled courses
-      
+
       // Mock data - replace with actual API calls
       setState(() {
         _submittedAssignments = 8;
@@ -60,7 +60,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           {
             'title': 'Final Project',
             'type': 'assignment',
-            'deadline': DateTime. now().add(const Duration(days: 14)),
+            'deadline': DateTime.now().add(const Duration(days: 14)),
             'course': 'INT3123',
           },
         ];
@@ -95,7 +95,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     // Summary Cards
                     Text(
                       'Learning Progress',
-                      style: Theme. of(context).textTheme. headlineSmall,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 16),
                     GridView.count(
@@ -108,7 +108,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       children: [
                         _buildStatCard(
                           'Submitted',
-                          _submittedAssignments. toString(),
+                          _submittedAssignments.toString(),
                           Icons.check_circle,
                           Colors.green,
                         ),
@@ -167,15 +167,31 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                                   alignment: BarChartAlignment.spaceAround,
                                   maxY: 100,
                                   barGroups: [
-                                    BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: 90, color: Colors.blue)]),
-                                    BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: 85, color: Colors.blue)]),
-                                    BarChartGroupData(x: 2, barRods: [BarChartRodData(toY: 92, color: Colors.blue)]),
-                                    BarChartGroupData(x: 3, barRods: [BarChartRodData(toY: 78, color: Colors.blue)]),
-                                    BarChartGroupData(x: 4, barRods: [BarChartRodData(toY: 82, color: Colors.blue)]),
+                                    BarChartGroupData(x: 0, barRods: [
+                                      BarChartRodData(
+                                          toY: 90, color: Colors.blue)
+                                    ]),
+                                    BarChartGroupData(x: 1, barRods: [
+                                      BarChartRodData(
+                                          toY: 85, color: Colors.blue)
+                                    ]),
+                                    BarChartGroupData(x: 2, barRods: [
+                                      BarChartRodData(
+                                          toY: 92, color: Colors.blue)
+                                    ]),
+                                    BarChartGroupData(x: 3, barRods: [
+                                      BarChartRodData(
+                                          toY: 78, color: Colors.blue)
+                                    ]),
+                                    BarChartGroupData(x: 4, barRods: [
+                                      BarChartRodData(
+                                          toY: 82, color: Colors.blue)
+                                    ]),
                                   ],
                                   titlesData: FlTitlesData(
                                     leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                                      sideTitles: SideTitles(
+                                          showTitles: true, reservedSize: 40),
                                     ),
                                     bottomTitles: AxisTitles(
                                       sideTitles: SideTitles(
@@ -185,8 +201,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                                         },
                                       ),
                                     ),
-                                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                    topTitles: AxisTitles(
+                                        sideTitles:
+                                            SideTitles(showTitles: false)),
+                                    rightTitles: AxisTitles(
+                                        sideTitles:
+                                            SideTitles(showTitles: false)),
                                   ),
                                   borderData: FlBorderData(show: false),
                                   gridData: FlGridData(show: true),
@@ -216,7 +236,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    if (_upcomingDeadlines. isEmpty)
+                    if (_upcomingDeadlines.isEmpty)
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(32),
@@ -226,21 +246,23 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         ),
                       )
                     else
-                      ..._upcomingDeadlines. map((deadline) {
-                        final daysUntil = deadline['deadline'].difference(DateTime.now()).inDays;
+                      ..._upcomingDeadlines.map((deadline) {
+                        final daysUntil = deadline['deadline']
+                            .difference(DateTime.now())
+                            .inDays;
                         final isUrgent = daysUntil <= 3;
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
-                          color: isUrgent ? Colors. red. shade50 : null,
+                          color: isUrgent ? Colors.red.shade50 : null,
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: deadline['type'] == 'quiz' 
-                                  ? Colors.blue 
+                              backgroundColor: deadline['type'] == 'quiz'
+                                  ? Colors.blue
                                   : Colors.green,
                               child: Icon(
-                                deadline['type'] == 'quiz' 
-                                    ? Icons.quiz 
+                                deadline['type'] == 'quiz'
+                                    ? Icons.quiz
                                     : Icons.assignment,
                                 color: Colors.white,
                               ),
@@ -262,7 +284,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),

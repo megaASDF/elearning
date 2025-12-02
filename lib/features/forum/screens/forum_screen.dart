@@ -7,7 +7,7 @@ import 'forum_topic_detail_screen.dart';
 class ForumScreen extends StatefulWidget {
   final String courseId;
 
-  const ForumScreen({super.key, required this.courseId});
+  const ForumScreen({super. key, required this.courseId});
 
   @override
   State<ForumScreen> createState() => _ForumScreenState();
@@ -31,12 +31,11 @@ class _ForumScreenState extends State<ForumScreen> {
       final data = await apiService.getForumTopics(widget.courseId);
       if (mounted) {
         setState(() {
-          _topics = data.map((json) => ForumTopicModel.fromJson(json)).toList();
+          _topics = data. map((json) => ForumTopicModel. fromJson(json)).toList();
           _isLoading = false;
         });
       }
     } catch (e, stackTrace) {
-      // Print to console/terminal
       debugPrint('🔥🔥🔥 FORUM ERROR 🔥🔥🔥');
       debugPrint('Error loading forum topics: $e');
       debugPrint('Stack trace: $stackTrace');
@@ -44,18 +43,11 @@ class _ForumScreenState extends State<ForumScreen> {
       
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context). showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors. red,
+            backgroundColor: Colors.red,
             duration: const Duration(seconds: 10),
-            action: SnackBarAction(
-              label: 'Copy Error',
-              textColor: Colors.white,
-              onPressed: () {
-                // Could add clipboard copy here if needed
-              },
-            ),
           ),
         );
       }
@@ -74,12 +66,12 @@ class _ForumScreenState extends State<ForumScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredTopics = _topics
-        . where((t) => t.title.toLowerCase().contains(_searchQuery.toLowerCase()))
+        .where((t) => t.title.toLowerCase(). contains(_searchQuery.toLowerCase()))
         .toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Course Forum')),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton. extended(
         onPressed: _showTopicDialog,
         icon: const Icon(Icons.add),
         label: const Text('New Topic'),
@@ -90,8 +82,8 @@ class _ForumScreenState extends State<ForumScreen> {
             padding: const EdgeInsets.all(16),
             child: TextField(
               decoration: InputDecoration(
-                hintText: 'Search topics...',
-                prefixIcon: const Icon(Icons. search),
+                hintText: 'Search topics.. .',
+                prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
@@ -103,22 +95,22 @@ class _ForumScreenState extends State<ForumScreen> {
                 : filteredTopics.isEmpty
                     ? Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment. center,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.forum, size: 64, color: Colors.grey[400]),
                             const SizedBox(height: 16),
                             Text(
                               'No topics yet',
-                              style: TextStyle(fontSize: 18, color: Colors. grey[600]),
+                              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                             ),
                             const SizedBox(height: 8),
-                            const Text('Start a discussion!'),
+                            const Text('Start a discussion! '),
                           ],
                         ),
                       )
                     : RefreshIndicator(
                         onRefresh: _loadTopics,
-                        child: ListView. builder(
+                        child: ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: filteredTopics.length,
                           itemBuilder: (context, index) {
@@ -127,7 +119,7 @@ class _ForumScreenState extends State<ForumScreen> {
                               margin: const EdgeInsets.only(bottom: 12),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  child: Text(topic.authorName[0].toUpperCase()),
+                                  child: Text(topic.authorName[0]. toUpperCase()),
                                 ),
                                 title: Text(
                                   topic.title,
@@ -190,7 +182,7 @@ class _ForumScreenState extends State<ForumScreen> {
                                         topicId: topic.id,
                                       ),
                                     ),
-                                  ).then((_) => _loadTopics());
+                                  ). then((_) => _loadTopics());
                                 },
                               ),
                             );

@@ -45,6 +45,81 @@ class CourseProvider extends ChangeNotifier {
     }
   }
 
+
+  Future<void> loadEnrolledCourses(String semesterId, String studentId) async {
+  _isLoading = true;
+  _error = null;
+  notifyListeners();
+
+  try {
+    // Get student's enrollments
+    final enrollmentsSnapshot = await _firestore
+        . collection('enrollments')
+        .where('studentId', isEqualTo: studentId)
+        .get();
+
+    // Get course IDs from enrollments
+    final courseIds = enrollmentsSnapshot. docs
+        .map((doc) => doc.data()['courseId'] as String)
+        .toSet()
+        .toList();
+
+    if (courseIds.isEmpty) {
+      _courses = [];
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    // Firestore 'in' queries are limited to 10 items
+    // Split into chunks if needed
+    List<CourseModel> allCourses = [];
+    
+    for (int i = 0; i < courseIds.length; i += 10) {
+      final chunk = courseIds.skip(i).take(10).toList();
+      
+      final coursesSnapshot = await _firestore
+          .collection('courses')
+          .where('semesterId', isEqualTo: semesterId)
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+
+      final courses = coursesSnapshot.docs. map((doc) {
+        final data = doc.data();
+        return CourseModel.fromJson({
+          'id': doc.id,
+          ...data,
+          'createdAt': _convertToIsoString(data['createdAt']),
+        });
+      }).toList();
+      
+      allCourses. addAll(courses);
+    }
+
+    _courses = allCourses;
+    _isLoading = false;
+    notifyListeners();
+  } catch (e) {
+    _error = e.toString();
+    _isLoading = false;
+    notifyListeners();
+    debugPrint('Error loading enrolled courses: $e');
+  }
+}
+
+String _convertToIsoString(dynamic value) {
+  if (value == null) {
+    return DateTime.now().toIso8601String();
+  } else if (value is Timestamp) {
+    return value. toDate().toIso8601String();
+  } else if (value is String) {
+    return value;
+  } else {
+    return DateTime.now().toIso8601String();
+  }
+}
+
+
   Future<void> createCourse(CourseModel course) async {
     _isLoading = true;
     _error = null;

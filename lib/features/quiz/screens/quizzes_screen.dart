@@ -188,6 +188,7 @@ class _QuizzesScreenState extends State<QuizzesScreen> {
                                     MaterialPageRoute(
                                       builder: (context) => QuizDetailScreen(
                                         quizId: quiz.id,
+                                        courseId: widget.courseId,
                                         isInstructor: widget.isInstructor,
                                       ),
                                     ),

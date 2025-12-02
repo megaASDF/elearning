@@ -92,138 +92,142 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     }
   }
 
-  void _showMaterialDetailsDialog(MaterialModel material, MaterialProvider provider) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(material.title),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (material.description. isNotEmpty) ...[
-                Text(
-                  material.description,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (material.fileUrls.isNotEmpty) ...[
-                const Text(
-                  'Files:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                ... material.fileUrls.map((url) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.insert_drive_file, color: Colors.blue),
-                    title: Text(
-                      url,
-                      style: const TextStyle(fontSize: 14),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.copy, size: 20),
-                      tooltip: 'Copy link',
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: url));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Link copied to clipboard! '),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                )),
-                const SizedBox(height: 8),
-              ],
-              if (material.links.isNotEmpty) ...[
-                const Text(
-                  'Links:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                ...material.links.map((link) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.link, color: Colors.green),
-                    title: Text(
-                      link,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.blue,
-                        decoration: TextDecoration.underline,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.copy, size: 20),
-                      tooltip: 'Copy link',
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: link));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Link copied to clipboard!'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                )),
-                const SizedBox(height: 8),
-              ],
-              const Divider(),
+void _showMaterialDetailsDialog(MaterialModel material, MaterialProvider provider) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: SelectableText(
+        material.title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (material.description. isNotEmpty) ...[
+              SelectableText(
+                material. description,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (material.fileUrls.isNotEmpty) ...[
+              const SelectableText(
+                'Files:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
+              ...material.fileUrls.map((url) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: const Icon(Icons.insert_drive_file, color: Colors. blue),
+                  title: SelectableText(
+                    url,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    tooltip: 'Copy link',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: url));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Link copied to clipboard!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              )),
+              const SizedBox(height: 8),
+            ],
+            if (material.links. isNotEmpty) ...[
+              const SelectableText(
+                'Links:',
+                style: TextStyle(fontWeight: FontWeight. bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              ...material.links.map((link) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: const Icon(Icons.link, color: Colors.green),
+                  title: SelectableText(
+                    link,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.blue,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    tooltip: 'Copy link',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: link));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Link copied to clipboard! '),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              )),
+              const SizedBox(height: 8),
+            ],
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.person, size: 16, color: Colors. grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: SelectableText(
                     'Author: ${material.authorName}',
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.visibility, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Views: ${material.viewCount}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                  const SizedBox(width: 16),
-                  Icon(Icons. download, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Downloads: ${material.downloadCount}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.visibility, size: 16, color: Colors. grey[600]),
+                const SizedBox(width: 4),
+                SelectableText(
+                  'Views: ${material.viewCount}',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.download, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                SelectableText(
+                  'Downloads: ${material.downloadCount}',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
-    );
-    
-    // Increment view count
-    provider.incrementViewCount(material.id);
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+  
+  // Increment view count
+  provider.incrementViewCount(material.id);
+}
 
   IconData _getIconForMaterial(MaterialModel material) {
     if (material.fileUrls.isNotEmpty) {

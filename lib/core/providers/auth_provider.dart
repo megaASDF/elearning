@@ -169,6 +169,8 @@ class AuthProvider extends ChangeNotifier {
   notifyListeners();
 }
 
+  
+
   Future<void> logout() async {
     await _auth.signOut();
     _user = null;
