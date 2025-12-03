@@ -9,6 +9,7 @@ import '../../../core/models/assignment_model.dart';
 import '../../../core/models/submission_model.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/submission_provider.dart';
+import '../widgets/assignment_tracking_table.dart';
 
 class AssignmentDetailScreen extends StatefulWidget {
   final String assignmentId;

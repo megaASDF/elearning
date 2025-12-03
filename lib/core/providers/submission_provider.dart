@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/submission_model.dart';
+import '../services/notification_service.dart';
 
 class SubmissionProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -101,39 +102,49 @@ class SubmissionProvider extends ChangeNotifier {
   }
 
   // Submit an assignment
-  Future<void> submitAssignment(
-    String assignmentId,
-    String studentId,
-    String studentName,
-    List<String> fileUrls,
-  ) async {
-    _isLoading = true;
-    _error = null;
+Future<void> submitAssignment(
+  String assignmentId,
+  String studentId,
+  String studentName,
+  List<String> fileUrls,
+) async {
+  _isLoading = true;
+  _error = null;
+  notifyListeners();
+
+  try {
+    await _firestore.collection('submissions').add({
+      'assignmentId': assignmentId,
+      'studentId': studentId,
+      'studentName': studentName,
+      'fileUrls': fileUrls,
+      'submittedAt': FieldValue. serverTimestamp(),
+      'grade': null,
+      'feedback': null,
+      'status': 'submitted',
+      'attemptNumber': 1,
+    });
+
+    // Get assignment title
+    final assignmentDoc = await _firestore.collection('assignments'). doc(assignmentId).get();
+    final assignmentTitle = assignmentDoc.data()?['title'] ?? 'Assignment';
+
+    // Send confirmation notification
+    final notificationService = NotificationService();
+    await notificationService.notifySubmissionReceived(
+      studentId: studentId,
+      assignmentTitle: assignmentTitle,
+    );
+
+    _isLoading = false;
     notifyListeners();
-
-    try {
-      await _firestore.collection('submissions').add({
-        'assignmentId': assignmentId,
-        'studentId': studentId,
-        'studentName': studentName,
-        'fileUrls': fileUrls,
-        'submittedAt': FieldValue.serverTimestamp(),
-        'grade': null,
-        'feedback': null,
-        'status': 'submitted',
-        'attemptNumber': 1,
-      });
-
-      await loadMySubmission(assignmentId, studentId);
-
-      debugPrint('✅ Assignment submitted');
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      debugPrint('Error submitting assignment: $e');
-    }
+  } catch (e) {
+    _error = e.toString();
+    _isLoading = false;
+    notifyListeners();
+    debugPrint('Error submitting assignment: $e');
   }
+}
 
   // Grade a submission (instructor)
   Future<void> gradeSubmission(

@@ -44,10 +44,7 @@ void main() async {
   // Initialize default semester if none exists
   await _initializeDefaultData();
 
-  // Initialize notification service (non-web only)
-  if (!kIsWeb) {
-    await NotificationService().initialize();
-  }
+  
 
   // Initialize connectivity service
   await ConnectivityService.instance.initialize();

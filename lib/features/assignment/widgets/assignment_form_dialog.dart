@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/models/assignment_model.dart';
 import '../../../core/providers/assignment_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../core/services/api_service.dart';
 
 class AssignmentFormDialog extends StatefulWidget {
   final String courseId;
@@ -33,34 +35,59 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
   List<String> _selectedFormats = ['pdf'];
   bool _isLoading = false;
 
+  // Group selection
+  List<Map<String, dynamic>> _groups = [];
+  List<String> _selectedGroupIds = [];
+  bool _selectAllGroups = true;
+
   final List<String> _availableFormats = [
     'pdf', 'doc', 'docx', 'txt', 'jpg', 'png', 'zip', 'rar'
   ];
 
   @override
   void initState() {
-    super.initState();
+    super. initState();
     final now = DateTime.now();
     
     _titleController = TextEditingController(text: widget.assignment?. title ?? '');
     _descriptionController = TextEditingController(text: widget.assignment?.description ??  '');
     _maxFileSizeController = TextEditingController(
-      text: widget.assignment?.maxFileSizeMB. toString() ?? '10'
+      text: widget.assignment?. maxFileSizeMB. toString() ?? '10'
     );
     
-    _startDate = widget.assignment?.startDate ??  now;
-    _deadline = widget.assignment?.deadline ?? now.add(Duration(days: 7));
-    _lateDeadline = widget.assignment?.lateDeadline;
-    _allowLateSubmission = widget.assignment?. allowLateSubmission ?? false;
+    _startDate = widget.assignment?.startDate ?? now;
+    _deadline = widget.assignment?.deadline ?? now.add(const Duration(days: 7));
+    _lateDeadline = widget.assignment?. lateDeadline;
+    _allowLateSubmission = widget.assignment?.allowLateSubmission ?? false;
     _maxAttempts = widget.assignment?.maxAttempts ?? 1;
     _unlimitedAttempts = _maxAttempts == -1;
     _selectedFormats = widget.assignment?.allowedFileFormats ?? ['pdf'];
+    
+    // Load existing group selection if editing
+    if (widget.assignment != null) {
+      _selectedGroupIds = widget.assignment!.groupIds;
+      _selectAllGroups = _selectedGroupIds.isEmpty;
+    }
+    
+    _loadGroups();
+  }
+
+  Future<void> _loadGroups() async {
+    try {
+      final apiService = ApiService();
+      final groups = await apiService.getGroups(widget.courseId);
+      setState(() {
+        _groups = groups. cast<Map<String, dynamic>>();
+      });
+    } catch (e) {
+      debugPrint('Error loading groups: $e');
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _descriptionController. dispose();
+    _descriptionController.dispose();
     _maxFileSizeController.dispose();
     super.dispose();
   }
@@ -69,7 +96,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: isDeadline ? _deadline : _startDate,
-      firstDate: DateTime.now(),
+      firstDate: DateTime. now(),
       lastDate: DateTime(2100),
     );
     
@@ -102,7 +129,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
   Future<void> _selectLateDeadline(BuildContext context) async {
     final DateTime?  picked = await showDatePicker(
       context: context,
-      initialDate: _lateDeadline ?? _deadline. add(Duration(days: 3)),
+      initialDate: _lateDeadline ?? _deadline. add(const Duration(days: 3)),
       firstDate: _deadline,
       lastDate: DateTime(2100),
     );
@@ -129,34 +156,55 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    // Validate group selection
+    if (! _selectAllGroups && _selectedGroupIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select at least one group')),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
       final firestore = FirebaseFirestore.instance;
+      final notificationService = NotificationService();
+
+      final groupIds = _selectAllGroups ? <String>[] : _selectedGroupIds;
 
       if (widget.assignment == null) {
-        // Create new
-        await firestore.collection('assignments').add({
+        // Create new assignment
+        final assignmentRef = await firestore. collection('assignments').add({
           'courseId': widget.courseId,
-          'groupIds': [],
+          'groupIds': groupIds,
           'title': _titleController.text. trim(),
           'description': _descriptionController.text.trim(),
           'attachments': [],
-          'startDate': Timestamp. fromDate(_startDate),
-          'deadline': Timestamp.fromDate(_deadline),
-          'lateDeadline': _lateDeadline != null ? Timestamp.fromDate(_lateDeadline!) : null,
+          'startDate': Timestamp.fromDate(_startDate),
+          'deadline': Timestamp. fromDate(_deadline),
+          'lateDeadline': _lateDeadline != null ?  Timestamp.fromDate(_lateDeadline!) : null,
           'allowLateSubmission': _allowLateSubmission,
           'maxAttempts': _unlimitedAttempts ? -1 : _maxAttempts,
           'allowedFileFormats': _selectedFormats,
           'maxFileSizeMB': double.tryParse(_maxFileSizeController.text) ?? 10.0,
           'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue. serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // Send in-app notifications to students
+        await notificationService.notifyNewAssignment(
+          courseId: widget.courseId,
+          assignmentId: assignmentRef.id,
+          assignmentTitle: _titleController.text.trim(),
+          deadline: _deadline,
+          groupIds: groupIds,
+        );
       } else {
-        // Update existing
+        // Update existing assignment
         await firestore.collection('assignments').doc(widget.assignment!.id).update({
-          'title': _titleController.text.trim(),
+          'groupIds': groupIds,
+          'title': _titleController.text. trim(),
           'description': _descriptionController.text.trim(),
           'startDate': Timestamp.fromDate(_startDate),
           'deadline': Timestamp.fromDate(_deadline),
@@ -171,12 +219,12 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
 
       // Reload assignments
       if (mounted) {
-        await context.read<AssignmentProvider>().loadAssignments(widget. courseId);
+        await context.read<AssignmentProvider>().loadAssignments(widget.courseId);
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.assignment == null
-                ? 'Assignment created successfully'
+                ? 'Assignment created & notifications sent!'
                 : 'Assignment updated successfully'),
             backgroundColor: Colors.green,
           ),
@@ -188,7 +236,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors. red,
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -214,7 +262,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
           body: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets. all(24),
+              padding: const EdgeInsets.all(24),
               children: [
                 // Title
                 TextFormField(
@@ -229,7 +277,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
                     }
                     return null;
                   },
-                  enabled: ! _isLoading,
+                  enabled: !_isLoading,
                 ),
                 const SizedBox(height: 16),
 
@@ -253,11 +301,11 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
 
                 // Start Date
                 ListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: EdgeInsets. zero,
                   title: const Text('Start Date'),
                   subtitle: Text(
                     '${_startDate.day}/${_startDate.month}/${_startDate.year} '
-                    '${_startDate.hour. toString().padLeft(2, '0')}:${_startDate.minute.toString().padLeft(2, '0')}'
+                    '${_startDate.hour.toString().padLeft(2, '0')}:${_startDate.minute.toString(). padLeft(2, '0')}'
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.calendar_today),
@@ -301,7 +349,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
                         : 'Not set'),
                     trailing: IconButton(
                       icon: const Icon(Icons.calendar_today),
-                      onPressed: _isLoading ? null : () => _selectLateDeadline(context),
+                      onPressed: _isLoading ?  null : () => _selectLateDeadline(context),
                     ),
                   ),
                 ],
@@ -324,7 +372,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
                 ),
                 if (! _unlimitedAttempts)
                   Slider(
-                    value: _maxAttempts.toDouble(),
+                    value: _maxAttempts. toDouble(),
                     min: 1,
                     max: 10,
                     divisions: 9,
@@ -348,7 +396,7 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
                       onSelected: _isLoading ? null : (selected) {
                         setState(() {
                           if (selected) {
-                            _selectedFormats. add(format);
+                            _selectedFormats.add(format);
                           } else {
                             _selectedFormats.remove(format);
                           }
@@ -380,9 +428,74 @@ class _AssignmentFormDialogState extends State<AssignmentFormDialog> {
                 ),
                 const SizedBox(height: 24),
 
+                // Group Selection
+                const Divider(),
+                const SizedBox(height: 16),
+                Text('Assign to Groups:', style: Theme.of(context). textTheme.titleMedium),
+                const SizedBox(height: 8),
+
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('All Groups'),
+                  value: _selectAllGroups,
+                  onChanged: _isLoading ?  null : (value) {
+                    setState(() {
+                      _selectAllGroups = value ??  false;
+                      if (_selectAllGroups) {
+                        _selectedGroupIds. clear();
+                      }
+                    });
+                  },
+                ),
+
+                if (! _selectAllGroups && _groups.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 150),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius. circular(8),
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _groups.length,
+                      itemBuilder: (context, index) {
+                        final group = _groups[index];
+                        final groupId = group['id'] as String;
+                        final groupName = group['name'] as String;
+
+                        return CheckboxListTile(
+                          title: Text(groupName),
+                          subtitle: Text('${group['studentCount'] ?? 0} students'),
+                          value: _selectedGroupIds. contains(groupId),
+                          onChanged: _isLoading ? null : (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedGroupIds.add(groupId);
+                              } else {
+                                _selectedGroupIds.remove(groupId);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+
+                if (! _selectAllGroups && _selectedGroupIds.isEmpty && _groups.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    '⚠️ Please select at least one group',
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+                ],
+
+                const SizedBox(height: 24),
+
                 // Submit Button
                 ElevatedButton(
-                  onPressed: _isLoading ?  null : _submit,
+                  onPressed: _isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.all(16),
                   ),

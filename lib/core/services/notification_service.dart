@@ -1,101 +1,151 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationService {
-  static final NotificationService _instance = NotificationService._internal();
-  factory NotificationService() => _instance;
-  NotificationService._internal();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
-  bool _initialized = false;
-
-  Future<void> initialize() async {
-    if (_initialized) return;
-
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _notifications.initialize(
-      settings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
-
-    _initialized = true;
-  }
-
-  void _onNotificationTapped(NotificationResponse response) {
-    // Handle notification tap - navigate to relevant screen
-    print('Notification tapped: ${response.payload}');
-  }
-
-  Future<void> showNotification({
-    required int id,
-    required String title,
-    required String body,
-    String? payload,
+  // Create notification for new announcement
+  Future<void> notifyNewAnnouncement({
+    required String courseId,
+    required String announcementId,
+    required String announcementTitle,
+    required List<String> groupIds,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'elearning_channel',
-      'E-Learning Notifications',
-      channelDescription: 'Notifications for assignments, quizzes, and announcements',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
+    try {
+      final students = await _getStudentsInGroups(courseId, groupIds);
+      
+      for (var student in students) {
+        await _firestore. collection('notifications').add({
+          'userId': student['id'],
+          'type': 'announcement',
+          'title': 'New Announcement',
+          'message': announcementTitle,
+          'relatedId': announcementId,
+          'relatedType': 'announcement',
+          'isRead': false,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      }
 
-    const iosDetails = DarwinNotificationDetails();
-
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _notifications.show(id, title, body, details, payload: payload);
-  }
-
-  Future<void> scheduleNotification({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime scheduledDate,
-    String? payload,
-  }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'elearning_channel',
-      'E-Learning Notifications',
-      channelDescription: 'Scheduled notifications for deadlines',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-
-    const iosDetails = DarwinNotificationDetails();
-
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    // Note: For production, use timezone package for proper scheduling
-    // This is a simplified version
-    final now = DateTime.now();
-    if (scheduledDate.isAfter(now)) {
-      // Use flutter_local_notifications scheduling in production
-      await _notifications.show(id, title, body, details, payload: payload);
+      debugPrint('✅ Created ${students.length} announcement notifications');
+    } catch (e) {
+      debugPrint('❌ Error creating notifications: $e');
     }
   }
 
-  Future<void> cancelNotification(int id) async {
-    await _notifications.cancel(id);
+  // Create notification for new assignment
+  Future<void> notifyNewAssignment({
+    required String courseId,
+    required String assignmentId,
+    required String assignmentTitle,
+    required DateTime deadline,
+    required List<String> groupIds,
+  }) async {
+    try {
+      final students = await _getStudentsInGroups(courseId, groupIds);
+      final deadlineStr = '${deadline.day}/${deadline.month}/${deadline.year}';
+
+      for (var student in students) {
+        await _firestore. collection('notifications').add({
+          'userId': student['id'],
+          'type': 'assignment',
+          'title': 'New Assignment',
+          'message': '$assignmentTitle - Due: $deadlineStr',
+          'relatedId': assignmentId,
+          'relatedType': 'assignment',
+          'isRead': false,
+          'createdAt': DateTime.now(). toIso8601String(),
+        });
+      }
+
+      debugPrint('✅ Created ${students.length} assignment notifications');
+    } catch (e) {
+      debugPrint('❌ Error creating notifications: $e');
+    }
   }
 
-  Future<void> cancelAllNotifications() async {
-    await _notifications.cancelAll();
+  // Notify when assignment is graded
+  Future<void> notifyGraded({
+    required String studentId,
+    required String assignmentTitle,
+    required double grade,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': studentId,
+        'type': 'grade',
+        'title': 'Assignment Graded',
+        'message': '$assignmentTitle - Grade: $grade',
+        'relatedId': '',
+        'relatedType': 'grade',
+        'isRead': false,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      debugPrint('✅ Sent grade notification');
+    } catch (e) {
+      debugPrint('❌ Error sending notification: $e');
+    }
+  }
+
+  // Confirm submission received
+  Future<void> notifySubmissionReceived({
+    required String studentId,
+    required String assignmentTitle,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': studentId,
+        'type': 'assignment',
+        'title': 'Submission Received',
+        'message': 'Your submission for "$assignmentTitle" has been received.',
+        'relatedId': '',
+        'relatedType': 'submission',
+        'isRead': false,
+        'createdAt': DateTime.now().toIso8601String(),
+      });
+
+      debugPrint('✅ Sent submission notification');
+    } catch (e) {
+      debugPrint('❌ Error sending notification: $e');
+    }
+  }
+
+  // Get students in specific groups (or all if groupIds is empty)
+  Future<List<Map<String, dynamic>>> _getStudentsInGroups(
+    String courseId,
+    List<String> groupIds,
+  ) async {
+    try {
+      Query query = _firestore
+          . collection('enrollments')
+          .where('courseId', isEqualTo: courseId);
+
+      if (groupIds.isNotEmpty) {
+        query = query.where('groupId', whereIn: groupIds);
+      }
+
+      final enrollments = await query.get();
+      final studentIds = enrollments.docs
+          .map((doc) => doc.data() as Map<String, dynamic>)
+          .map((data) => data['studentId'] as String)
+          .toSet()
+          .toList();
+
+      if (studentIds.isEmpty) return [];
+
+      final students = <Map<String, dynamic>>[];
+      for (var studentId in studentIds) {
+        final studentDoc = await _firestore.collection('users').doc(studentId).get();
+        if (studentDoc.exists) {
+          students.add({'id': studentDoc.id, ... studentDoc.data()! });
+        }
+      }
+
+      return students;
+    } catch (e) {
+      debugPrint('❌ Error getting students: $e');
+      return [];
+    }
   }
 }
