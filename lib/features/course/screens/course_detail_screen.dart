@@ -94,8 +94,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                       colors: [
                         Colors.primaries[
                             _course!.code.hashCode % Colors.primaries.length],
-                        Colors.primaries[
-                                _course!.code.hashCode % Colors.primaries.length]
+                        Colors
+                            .primaries[_course!.code.hashCode %
+                                Colors.primaries.length]
                             .shade700,
                       ],
                     ),
