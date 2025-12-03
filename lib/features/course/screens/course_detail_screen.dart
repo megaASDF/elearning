@@ -6,6 +6,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../tabs/stream_tab.dart';
 import '../tabs/classwork_tab.dart';
 import '../tabs/people_tab.dart';
+import '../../chatbot/screens/ai_chatbot_screen.dart';  
 
 class CourseDetailScreen extends StatefulWidget {
   final String courseId;
@@ -148,6 +149,23 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
           ],
         ),
       ),
+          floatingActionButton: FloatingActionButton. extended(  // ADD THIS
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AIChatbotScreen(
+              courseId: widget.courseId,
+              courseName: _course!.name,
+            ),
+          ),
+        );
+      },
+      icon: const Icon(Icons.smart_toy),
+      label: const Text('AI Assistant'),
+      backgroundColor: Colors.purple,
+    ),
     );
   }
+  
 }

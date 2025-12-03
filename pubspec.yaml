@@ -9,7 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  # Gemini AI
+  google_generative_ai: ^0.2.2
   # State Management
   provider: ^6.1.2
 

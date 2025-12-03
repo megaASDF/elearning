@@ -73,6 +73,55 @@ class ApiService {
     };
   }
 
+// --- Questions (for Quiz) ---
+Future<Map<String, dynamic>> createQuestion(String courseId, Map<String, dynamic> questionData) async {
+  try {
+    final docRef = await _firestore.collection('questions').add({
+      'courseId': courseId,
+      'question': questionData['question'],
+      'choices': questionData['choices'],
+      'correctAnswer': questionData['correctAnswer'],
+      'difficulty': questionData['difficulty'],
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    
+    final doc = await docRef.get();
+    debugPrint('✅ Question created: ${doc.id}');
+    return {'id': doc.id, ... doc.data() ??  {}};
+  } catch (e) {
+    debugPrint('❌ Error creating question: $e');
+    rethrow;
+  }
+}
+
+Future<List<dynamic>> getQuestions(String courseId, {String? difficulty}) async {
+  try {
+    Query query = _firestore
+        .collection('questions')
+        .where('courseId', isEqualTo: courseId);
+    
+    if (difficulty != null) {
+      query = query.where('difficulty', isEqualTo: difficulty);
+    }
+    
+    final snapshot = await query.get();
+    return snapshot.docs.map((doc) => {'id': doc.id, ... doc.data() as Map<String, dynamic>}).toList();
+  } catch (e) {
+    debugPrint('❌ Error getting questions: $e');
+    return [];
+  }
+}
+
+Future<void> deleteQuestion(String questionId) async {
+  try {
+    await _firestore.collection('questions').doc(questionId).delete();
+    debugPrint('🗑️ Question deleted: $questionId');
+  } catch (e) {
+    debugPrint('❌ Error deleting question: $e');
+    rethrow;
+  }
+}
+
   // --- Semesters ---
   Future<List<dynamic>> getSemesters() async {
     final snapshot = await _firestore. collection('semesters').get();

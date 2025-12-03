@@ -1,9 +1,11 @@
+import 'package:elearning_app/features/chatbot/screens/ai_chatbot_screen.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/home/screens/student_home_screen.dart';
 import '../../features/home/screens/instructor_dashboard_screen.dart';
 import '../../features/course/screens/course_detail_screen.dart';
+
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -24,6 +26,15 @@ class AppRouter {
       GoRoute(
         path: '/instructor-dashboard',
         builder: (context, state) => const InstructorDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/ai-chatbot',
+        name: 'ai-chatbot',
+        builder: (context, state) {
+          final courseId = state.uri.queryParameters['courseId'];
+          final courseName = state.uri.queryParameters['courseName'];
+          return AIChatbotScreen(courseId: courseId, courseName: courseName);
+        },
       ),
       GoRoute(
         path: '/course/:courseId',
