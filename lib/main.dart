@@ -1,5 +1,6 @@
 import 'package:elearning_app/core/providers/submission_provider.dart';
 import 'package:elearning_app/core/services/offline_database_service.dart';
+import 'package:elearning_app/test_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +19,7 @@ import 'core/providers/announcement_provider.dart'; // ADD
 import 'core/services/notification_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'package:elearning_app/core/services/sync_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -33,18 +35,21 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // TEST FIREBASE STORAGE
+  await testFirebaseStorage();
+
   // Initialize Offline Database (ADD THIS)
   await OfflineDatabaseService.initialize();
-  
+
   // Initialize Sync Service (ADD THIS)
   final syncService = SyncService();
   syncService.startListening((isOnline) {
-    debugPrint(isOnline ? '✅ Back online - syncing.. .' : '⚠️ Offline mode active');
+    debugPrint(
+        isOnline ? '✅ Back online - syncing.. .' : '⚠️ Offline mode active');
   });
   // Initialize default semester if none exists
   await _initializeDefaultData();
-
-  
 
   // Initialize connectivity service
   await ConnectivityService.instance.initialize();

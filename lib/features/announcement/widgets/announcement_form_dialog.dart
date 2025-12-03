@@ -4,6 +4,7 @@ import '../../../core/providers/announcement_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/api_service.dart';
+import '../../announcement/screens/announcement_detail_screen.dart';
 
 class AnnouncementFormDialog extends StatefulWidget {
   final String courseId;
