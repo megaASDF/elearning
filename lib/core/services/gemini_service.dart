@@ -1,8 +1,10 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
+import '../config/api_keys.dart'; 
+
 class GeminiService {
-  static const String _apiKey = 'AIzaSyAm83aQqLHXrX51MpJd50bBrWbcTCl6UYk'; // Replace with your key
+  static const String _apiKey = ApiKeys.geminiApiKey; // Replace with your key
   
   late final GenerativeModel _model;
   late final GenerativeModel _chatModel;

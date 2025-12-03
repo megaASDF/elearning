@@ -61,3 +61,7 @@ storage.rules
 # API Keys & Secrets
 **/apikeys.dart
 **/secrets.dart
+# API Keys
+lib/core/config/api_keys.dart
+*. env
+. env
