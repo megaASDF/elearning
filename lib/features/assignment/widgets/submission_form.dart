@@ -28,7 +28,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
   double _progressValue = 0.0;
 
   Future<void> _pickFiles() async {
-    final result = await FilePicker.platform. pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'png', 'txt'],
@@ -36,17 +36,20 @@ class _SubmissionFormState extends State<SubmissionForm> {
     
     if (result != null) {
       setState(() {
-        _files.addAll(result. files);
+        _files.addAll(result.files);
       });
     }
   }
 
-  Future<String> _uploadFileToStorage(PlatformFile file, int index, int total) async {
+  // UPDATED: Now accepts 'uid' to build the correct path
+  Future<String> _uploadFileToStorage(PlatformFile file, int index, int total, String uid) async {
     try {
       final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+      
+      // ✅ FIX: Path now matches rules: submissions/{assignmentId}/{studentId}/{fileName}
       final storageRef = FirebaseStorage.instance
           .ref()
-          .child('submissions/${widget.assignmentId}/$fileName');
+          .child('submissions/${widget.assignmentId}/$uid/$fileName');
 
       UploadTask uploadTask;
       
@@ -60,7 +63,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
         // Mobile/Desktop upload using file path
         uploadTask = storageRef.putFile(
           File(file.path!),
-          SettableMetadata(contentType: _getContentType(file. name)),
+          SettableMetadata(contentType: _getContentType(file.name)),
         );
       } else {
         throw Exception('No file data available');
@@ -96,7 +99,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
       case 'doc':
         return 'application/msword';
       case 'docx':
-        return 'application/vnd. openxmlformats-officedocument.wordprocessingml. document';
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       case 'jpg':
       case 'jpeg':
         return 'image/jpeg';
@@ -111,7 +114,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
 
   Future<void> _submit() async {
     if (_files.isEmpty) {
-      ScaffoldMessenger. of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please attach at least one file')),
       );
       return;
@@ -124,10 +127,15 @@ class _SubmissionFormState extends State<SubmissionForm> {
     });
 
     try {
+      // ✅ FIX: Get the User ID from the provider
+      final user = context.read<AuthProvider>().user!;
+      final uid = user.id;
+
       // Upload all files
       List<String> fileUrls = [];
       for (int i = 0; i < _files.length; i++) {
-        final url = await _uploadFileToStorage(_files[i], i, _files.length);
+        // ✅ FIX: Pass the 'uid' to the upload function
+        final url = await _uploadFileToStorage(_files[i], i, _files.length, uid);
         fileUrls.add(url);
       }
 
@@ -137,7 +145,6 @@ class _SubmissionFormState extends State<SubmissionForm> {
       });
 
       // Submit assignment with file URLs
-      final user = context.read<AuthProvider>().user! ;
       final submissionProvider = context.read<SubmissionProvider>();
       
       await submissionProvider.submitAssignment(
@@ -159,10 +166,10 @@ class _SubmissionFormState extends State<SubmissionForm> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context). showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors. red,
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -197,7 +204,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
               ),
             ..._files.map((f) => ListTile(
               leading: const Icon(Icons.file_present),
-              title: Text(f. name),
+              title: Text(f.name),
               subtitle: Text('${(f.size / 1024).toStringAsFixed(2)} KB'),
               trailing: IconButton(
                 icon: const Icon(Icons.close),
@@ -213,7 +220,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
               const SizedBox(height: 8),
               Text(
                 _uploadProgress,
-                style: const TextStyle(fontSize: 14, color: Colors. blue),
+                style: const TextStyle(fontSize: 14, color: Colors.blue),
               ),
               const SizedBox(height: 16),
             ],
@@ -227,7 +234,7 @@ class _SubmissionFormState extends State<SubmissionForm> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isLoading || _files.isEmpty ?  null : _submit,
+                    onPressed: _isLoading || _files.isEmpty ? null : _submit,
                     child: _isLoading
                         ? const SizedBox(
                             width: 20,

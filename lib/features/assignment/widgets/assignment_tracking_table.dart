@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart'; // Required for opening files
 import '../../../core/services/csv_export_service.dart';
 import '../../../core/models/submission_model.dart';
+import '../../../core/providers/submission_provider.dart';
 
 class AssignmentTrackingTable extends StatefulWidget {
   final String assignmentId;
@@ -226,6 +229,195 @@ class _AssignmentTrackingTableState extends State<AssignmentTrackingTable> {
     }
   }
 
+  Future<void> _launchUrl(String urlString) async {
+    try {
+      final Uri url = Uri.parse(urlString);
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch $url');
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open file')),
+        );
+      }
+    }
+  }
+
+  void _showSubmissionDetails(
+      Map<String, dynamic> submission, Map<String, dynamic> student) {
+    final fileUrls = List<String>.from(submission['fileUrls'] ?? []);
+    final gradeController =
+        TextEditingController(text: submission['grade']?.toString() ?? '');
+    final feedbackController =
+        TextEditingController(text: submission['feedback']?.toString() ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Submission: ${student['displayName']}'),
+        content: SizedBox(
+          width: 500, // Fixed width for better layout on desktop
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Submission Time
+                Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Submitted: ${_formatDate(submission['submittedAt'])}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (submission['isLate'] == true) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'LATE',
+                          style: TextStyle(
+                              color: Colors.red.shade900, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Files List
+                const Text('Attached Files:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                if (fileUrls.isEmpty)
+                  const Text('No files attached.',
+                      style: TextStyle(fontStyle: FontStyle.italic))
+                else
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: fileUrls.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final url = entry.value;
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.file_present,
+                              color: Colors.blue),
+                          title: Text('Attachment ${index + 1}'),
+                          subtitle: Text(
+                            'Click to view',
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade600),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.open_in_new),
+                            tooltip: 'Open File',
+                            onPressed: () => _launchUrl(url),
+                          ),
+                          onTap: () => _launchUrl(url),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                const Divider(height: 32),
+
+                // Grading Section
+                const Text('Grade & Feedback',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: gradeController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Grade (0-100)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.grade),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: feedbackController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Feedback (Optional)',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.save),
+            label: const Text('Save Grade'),
+            onPressed: () async {
+              final grade = double.tryParse(gradeController.text);
+              if (grade == null || grade < 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Please enter a valid positive grade')),
+                );
+                return;
+              }
+
+              try {
+                // Use SubmissionProvider to grade
+                await Provider.of<SubmissionProvider>(context, listen: false)
+                    .gradeSubmission(
+                  submission['id'],
+                  widget.assignmentId,
+                  grade,
+                  feedbackController.text,
+                );
+
+                if (mounted) {
+                  Navigator.pop(context); // Close dialog
+                  _loadData(); // Refresh table data
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Grade saved successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      content: Text('Error saving grade: $e'),
+                      backgroundColor: Colors.red),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '-';
+    return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -402,9 +594,9 @@ class _AssignmentTrackingTableState extends State<AssignmentTrackingTable> {
                         ),
                       ),
                       DataCell(Text(
-                        hasSubmitted
-                            ? '${submission['submittedAt']?.day}/${submission['submittedAt']?.month}/${submission['submittedAt']?.year} ${submission['submittedAt']?.hour}:${submission['submittedAt']?.minute.toString().padLeft(2, '0')}'
-                            : '-',
+                        _formatDate(submission != null
+                            ? submission['submittedAt']
+                            : null),
                       )),
                       DataCell(Text(hasSubmitted
                           ? '${submission['attemptNumber'] ?? 1}'
@@ -414,8 +606,10 @@ class _AssignmentTrackingTableState extends State<AssignmentTrackingTable> {
                         hasSubmitted
                             ? IconButton(
                                 icon: const Icon(Icons.visibility, size: 20),
+                                color: Colors.blue,
+                                tooltip: 'View & Grade',
                                 onPressed: () {
-                                  // TODO: Navigate to submission detail
+                                  _showSubmissionDetails(submission, student);
                                 },
                               )
                             : const Text('-'),
