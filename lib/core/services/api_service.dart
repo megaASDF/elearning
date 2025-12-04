@@ -310,15 +310,49 @@ Future<void> deleteQuestion(String questionId) async {
     return snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList();
   }
 
-  Future<Map<String, dynamic>> createStudent(Map<String, dynamic> data) async {
-    final docRef = await _firestore.collection('users').add({
-      ... data,
+// Inside ApiService class
+Future<void> createStudent(Map<String, dynamic> data) async {
+  final firestore = FirebaseFirestore.instance;
+  final auth = FirebaseAuth.instance;
+
+  // 1. Force a default password for the demo
+  final String password = '123456'; 
+
+  try {
+    // Check if user exists
+    final existing = await firestore
+        .collection('users')
+        .where('email', isEqualTo: data['email'])
+        .get();
+
+    if (existing.docs.isNotEmpty) return; // Skip if exists
+
+    // Create Auth User
+    final userCredential = await auth.createUserWithEmailAndPassword(
+      email: data['email'],
+      password: password, // <--- USE FIXED PASSWORD HERE
+    );
+
+    // Create Firestore Doc
+    await firestore.collection('users').doc(userCredential.user!.uid).set({
+      'username': data['username'],
+      'displayName': data['displayName'],
+      'email': data['email'],
+      'studentId': data['studentId'],
+      'department': data['department'],
       'role': 'student',
       'createdAt': FieldValue.serverTimestamp(),
     });
-    final doc = await docRef.get();
-    return {'id': doc. id, ...doc.data() ??  {}};
+
+    // Important: Sign out the new student immediately so Admin stays logged in
+    // (This is a simplified hack for the demo. In real apps, you'd use Admin SDK)
+    await auth.signOut();
+    
+  } catch (e) {
+    debugPrint('Error creating student ${data['username']}: $e');
+    // Don't rethrow, just log so import continues
   }
+}
 
   Future<void> enrollStudent(String studentId, String courseId, String groupId) async {
     await _firestore.collection('enrollments').add({

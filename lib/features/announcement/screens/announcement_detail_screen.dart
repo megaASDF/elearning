@@ -85,6 +85,7 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
 
       setState(() => _isLoading = false);
     } catch (e) {
+      print("🔥 FIRESTORE ERROR LINK: $e");
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

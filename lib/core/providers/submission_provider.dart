@@ -5,11 +5,11 @@ import '../services/notification_service.dart';
 
 class SubmissionProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   List<SubmissionModel> _submissions = [];
   SubmissionModel? _mySubmission;
   bool _isLoading = false;
-  String?  _error;
+  String? _error;
 
   List<SubmissionModel> get submissions => _submissions;
   SubmissionModel? get mySubmission => _mySubmission;
@@ -23,30 +23,45 @@ class SubmissionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final snapshot = await _firestore
-          .collection('submissions')
-          .where('assignmentId', isEqualTo: assignmentId)
-          .get();
+      QuerySnapshot snapshot;
+      try {
+        // 1. Try Server (Timeout after 5 seconds)
+        snapshot = await _firestore
+            .collection('submissions')
+            .where('assignmentId', isEqualTo: assignmentId)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        // 2. Timeout or Offline -> Load from Cache
+        debugPrint('Offline/Timeout: Loading submissions from cache');
+        snapshot = await _firestore
+            .collection('submissions')
+            .where('assignmentId', isEqualTo: assignmentId)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       _submissions = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return SubmissionModel. fromJson({
+        final data = doc.data() as Map<String, dynamic>;
+        return SubmissionModel.fromJson({
           'id': doc.id,
           'assignmentId': data['assignmentId'] ?? '',
           'studentId': data['studentId'] ?? '',
-          'studentName': data['studentName'] ??  'Unknown',
+          'studentName': data['studentName'] ?? 'Unknown',
           'fileUrls': data['fileUrls'] ?? [],
-          'submittedAt': (data['submittedAt'] as Timestamp?)?.toDate(). toIso8601String() ?? DateTime.now().toIso8601String(),
+          'submittedAt': (data['submittedAt'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              DateTime.now().toIso8601String(),
           'grade': data['grade'],
           'feedback': data['feedback'],
           'status': data['status'] ?? 'submitted',
-          'attemptNumber': data['attemptNumber'] ??  1,
+          'attemptNumber': data['attemptNumber'] ?? 1,
         });
       }).toList();
 
       _submissions.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
 
-      debugPrint('✅ Loaded ${_submissions. length} submissions');
+      debugPrint('✅ Loaded ${_submissions.length} submissions');
 
       _isLoading = false;
       notifyListeners();
@@ -65,26 +80,43 @@ class SubmissionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final snapshot = await _firestore
-          .collection('submissions')
-          .where('assignmentId', isEqualTo: assignmentId)
-          .where('studentId', isEqualTo: studentId)
-          .limit(1)
-          .get();
+      QuerySnapshot snapshot;
+      try {
+        // 1. Try Server (Timeout after 5 seconds)
+        snapshot = await _firestore
+            .collection('submissions')
+            .where('assignmentId', isEqualTo: assignmentId)
+            .where('studentId', isEqualTo: studentId)
+            .limit(1)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        // 2. Timeout or Offline -> Load from Cache
+        debugPrint('Offline/Timeout: Loading my submission from cache');
+        snapshot = await _firestore
+            .collection('submissions')
+            .where('assignmentId', isEqualTo: assignmentId)
+            .where('studentId', isEqualTo: studentId)
+            .limit(1)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       if (snapshot.docs.isNotEmpty) {
         final doc = snapshot.docs.first;
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         _mySubmission = SubmissionModel.fromJson({
           'id': doc.id,
           'assignmentId': data['assignmentId'] ?? '',
           'studentId': data['studentId'] ?? '',
           'studentName': data['studentName'] ?? 'Unknown',
-          'fileUrls': data['fileUrls'] ??  [],
-          'submittedAt': (data['submittedAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+          'fileUrls': data['fileUrls'] ?? [],
+          'submittedAt': (data['submittedAt'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              DateTime.now().toIso8601String(),
           'grade': data['grade'],
           'feedback': data['feedback'],
-          'status': data['status'] ??  'submitted',
+          'status': data['status'] ?? 'submitted',
           'attemptNumber': data['attemptNumber'] ?? 1,
         });
       } else {
@@ -101,57 +133,58 @@ class SubmissionProvider extends ChangeNotifier {
     }
   }
 
-  // Submit an assignment
-Future<void> submitAssignment(
-  String assignmentId,
-  String studentId,
-  String studentName,
-  List<String> fileUrls,
-) async {
-  _isLoading = true;
-  _error = null;
-  notifyListeners();
-
-  try {
-    await _firestore.collection('submissions').add({
-      'assignmentId': assignmentId,
-      'studentId': studentId,
-      'studentName': studentName,
-      'fileUrls': fileUrls,
-      'submittedAt': FieldValue. serverTimestamp(),
-      'grade': null,
-      'feedback': null,
-      'status': 'submitted',
-      'attemptNumber': 1,
-    });
-
-    // Get assignment title
-    final assignmentDoc = await _firestore.collection('assignments'). doc(assignmentId).get();
-    final assignmentTitle = assignmentDoc.data()?['title'] ?? 'Assignment';
-
-    // Send confirmation notification
-    final notificationService = NotificationService();
-    await notificationService.notifySubmissionReceived(
-      studentId: studentId,
-      assignmentTitle: assignmentTitle,
-    );
-
-    _isLoading = false;
+  Future<void> submitAssignment(
+    String assignmentId,
+    String studentId,
+    String studentName,
+    List<String> fileUrls,
+  ) async {
+    _isLoading = true;
+    _error = null;
     notifyListeners();
-  } catch (e) {
-    _error = e.toString();
-    _isLoading = false;
-    notifyListeners();
-    debugPrint('Error submitting assignment: $e');
+
+    try {
+      await _firestore.collection('submissions').add({
+        'assignmentId': assignmentId,
+        'studentId': studentId,
+        'studentName': studentName,
+        'fileUrls': fileUrls,
+        'submittedAt': FieldValue.serverTimestamp(),
+        'grade': null,
+        'feedback': null,
+        'status': 'submitted',
+        'attemptNumber': 1,
+      });
+
+      // Get assignment title
+      final assignmentDoc = await _firestore
+          .collection('assignments')
+          .doc(assignmentId)
+          .get();
+      final assignmentTitle = assignmentDoc.data()?['title'] ?? 'Assignment';
+
+      // Send confirmation notification
+      final notificationService = NotificationService();
+      await notificationService.notifySubmissionReceived(
+        studentId: studentId,
+        assignmentTitle: assignmentTitle,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Error submitting assignment: $e');
+    }
   }
-}
 
-  // Grade a submission (instructor)
   Future<void> gradeSubmission(
     String submissionId,
     String assignmentId,
     double grade,
-    String?  feedback,
+    String? feedback,
   ) async {
     _isLoading = true;
     _error = null;

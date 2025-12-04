@@ -4,7 +4,7 @@ import '../models/material_model.dart';
 
 class MaterialProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   List<MaterialModel> _materials = [];
   bool _isLoading = false;
   String? _error;
@@ -13,65 +13,80 @@ class MaterialProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-Future<void> loadMaterials(String courseId) async {
-  _isLoading = true;
-  _error = null;
-  notifyListeners();
-
-  try {
-    final snapshot = await _firestore
-        .collection('materials')
-        .where('courseId', isEqualTo: courseId)
-        .orderBy('createdAt', descending: true)
-        .get();
-
-    _materials = snapshot.docs.map((doc) {
-      final data = doc.data();
-      return MaterialModel.fromJson({
-        'id': doc.id,
-        'courseId': data['courseId'] ?? courseId,
-        'title': data['title'] ?? '',
-        'description': data['description'] ?? '',
-        'fileUrls': data['fileUrls'] ?? [],
-        'links': data['links'] ?? [],
-        'authorName': data['authorName'] ??  'Unknown',
-        'viewCount': data['viewCount'] ??  0,
-        'downloadCount': data['downloadCount'] ?? 0,
-        'createdAt': _convertToIsoString(data['createdAt']),
-        'updatedAt': _convertToIsoString(data['updatedAt']),
-      });
-    }).toList();
-
-    _isLoading = false;
-    notifyListeners();
-  } catch (e) {
-    _error = e. toString();
-    _isLoading = false;
-    notifyListeners();
-    debugPrint('Error loading materials: $e');
-  }
-}
-
-// Add this helper method in the provider class
-String _convertToIsoString(dynamic value) {
-  if (value == null) {
-    return DateTime.now().toIso8601String();
-  } else if (value is Timestamp) {
-    return value.toDate(). toIso8601String();
-  } else if (value is String) {
-    return value;
-  } else {
-    return DateTime.now().toIso8601String();
-  }
-}
-
-  Future<void> createMaterial(String courseId, String title, String description, String contentType, {String? url, String? fileName, int? fileSize}) async {
+  Future<void> loadMaterials(String courseId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      await _firestore.collection('materials'). add({
+      QuerySnapshot snapshot;
+      try {
+        // 1. Try Server (Timeout after 5 seconds)
+        snapshot = await _firestore
+            .collection('materials')
+            .where('courseId', isEqualTo: courseId)
+            .orderBy('createdAt', descending: true)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        // 2. Timeout or Offline -> Load from Cache
+        debugPrint('Offline/Timeout: Loading materials from cache');
+        snapshot = await _firestore
+            .collection('materials')
+            .where('courseId', isEqualTo: courseId)
+            .orderBy('createdAt', descending: true)
+            .get(const GetOptions(source: Source.cache));
+      }
+
+      _materials = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return MaterialModel.fromJson({
+          'id': doc.id,
+          'courseId': data['courseId'] ?? courseId,
+          'title': data['title'] ?? '',
+          'description': data['description'] ?? '',
+          'fileUrls': data['fileUrls'] ?? [],
+          'links': data['links'] ?? [],
+          'authorName': data['authorName'] ?? 'Unknown',
+          'viewCount': data['viewCount'] ?? 0,
+          'downloadCount': data['downloadCount'] ?? 0,
+          'createdAt': _convertToIsoString(data['createdAt']),
+          'updatedAt': _convertToIsoString(data['updatedAt']),
+        });
+      }).toList();
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Error loading materials: $e');
+    }
+  }
+
+  // Helper method
+  String _convertToIsoString(dynamic value) {
+    if (value == null) {
+      return DateTime.now().toIso8601String();
+    } else if (value is Timestamp) {
+      return value.toDate().toIso8601String();
+    } else if (value is String) {
+      return value;
+    } else {
+      return DateTime.now().toIso8601String();
+    }
+  }
+
+  Future<void> createMaterial(
+      String courseId, String title, String description, String contentType,
+      {String? url, String? fileName, int? fileSize}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _firestore.collection('materials').add({
         'courseId': courseId,
         'title': title,
         'description': description,
@@ -93,7 +108,8 @@ String _convertToIsoString(dynamic value) {
     }
   }
 
-  Future<void> updateMaterial(String id, String courseId, String title, String description) async {
+  Future<void> updateMaterial(
+      String id, String courseId, String title, String description) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -119,10 +135,10 @@ String _convertToIsoString(dynamic value) {
     notifyListeners();
 
     try {
-      await _firestore. collection('materials').doc(id). delete();
+      await _firestore.collection('materials').doc(id).delete();
       await loadMaterials(courseId);
     } catch (e) {
-      _error = e. toString();
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
       debugPrint('Error deleting material: $e');
@@ -131,7 +147,7 @@ String _convertToIsoString(dynamic value) {
 
   Future<void> incrementViewCount(String id) async {
     try {
-      await _firestore. collection('materials').doc(id). update({
+      await _firestore.collection('materials').doc(id).update({
         'viewCount': FieldValue.increment(1),
       });
     } catch (e) {
@@ -141,7 +157,7 @@ String _convertToIsoString(dynamic value) {
 
   Future<void> incrementDownloadCount(String id) async {
     try {
-      await _firestore.collection('materials'). doc(id).update({
+      await _firestore.collection('materials').doc(id).update({
         'downloadCount': FieldValue.increment(1),
       });
     } catch (e) {

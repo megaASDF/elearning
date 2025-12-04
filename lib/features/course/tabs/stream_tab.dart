@@ -48,7 +48,7 @@ class _StreamTabState extends State<StreamTab> {
     }
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Consumer<AnnouncementProvider>(
@@ -81,15 +81,14 @@ class _StreamTabState extends State<StreamTab> {
             );
           }
 
-          return RefreshIndicator(
+return RefreshIndicator(
             onRefresh: _loadAnnouncements,
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: provider.announcements. length,
+              itemCount: provider.announcements.length,
               itemBuilder: (context, index) {
                 return AnnouncementCard(
                   announcement: provider.announcements[index],
-                  // Removed courseId parameter
                 );
               },
             ),

@@ -4,7 +4,7 @@ import '../models/course_model.dart';
 
 class CourseProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   List<CourseModel> _courses = [];
   CourseModel? _selectedCourse;
   bool _isLoading = false;
@@ -15,110 +15,144 @@ class CourseProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  Future<void> loadCourses(String semesterId) async {
+Future<void> loadCourses(String semesterId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
-    try {
-      final snapshot = await _firestore
-          .collection('courses')
-          .where('semesterId', isEqualTo: semesterId)
-          .get();
+try {
+  QuerySnapshot snapshot;
+  try {
+    print("🔵 Attempting Server fetch (with 5s timeout)...");
+    
+    // ADD .timeout HERE!
+    snapshot = await _firestore
+        .collection('courses')
+        .where('semesterId', isEqualTo: semesterId)
+        .get(const GetOptions(source: Source.server))
+        .timeout(const Duration(seconds: 5)); // <--- FORCE FAIL AFTER 5 SECONDS
+        
+  } catch (e) {
+    print("🟡 Server timed out or failed. Switching to Cache.");
+    
+    snapshot = await _firestore
+        .collection('courses')
+        .where('semesterId', isEqualTo: semesterId)
+        .get(const GetOptions(source: Source.cache));
+  }
 
       _courses = snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         return CourseModel.fromJson({
           'id': doc.id,
-          ... data,
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate(). toIso8601String() ?? DateTime.now().toIso8601String(),
+          ...data,
+          'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? 
+              DateTime.now().toIso8601String(),
         });
       }).toList();
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      print("❌ [6] FATAL ERROR: Even cache failed. $e");
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
-      debugPrint('Error loading courses: $e');
     }
   }
 
-
+  // FIX APPLIED HERE: loadEnrolledCourses
   Future<void> loadEnrolledCourses(String semesterId, String studentId) async {
-  _isLoading = true;
-  _error = null;
-  notifyListeners();
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
-  try {
-    // Get student's enrollments
-    final enrollmentsSnapshot = await _firestore
-        . collection('enrollments')
-        .where('studentId', isEqualTo: studentId)
-        .get();
+    try {
+      // Step A: Get Enrollments (with offline support)
+      QuerySnapshot enrollmentsSnapshot;
+      try {
+        enrollmentsSnapshot = await _firestore
+            .collection('enrollments')
+            .where('studentId', isEqualTo: studentId)
+            .get(const GetOptions(source: Source.server));
+      } catch (e) {
+        debugPrint('Offline mode: Fetching enrollments from cache');
+        enrollmentsSnapshot = await _firestore
+            .collection('enrollments')
+            .where('studentId', isEqualTo: studentId)
+            .get(const GetOptions(source: Source.cache));
+      }
 
-    // Get course IDs from enrollments
-    final courseIds = enrollmentsSnapshot. docs
-        .map((doc) => doc.data()['courseId'] as String)
-        .toSet()
-        .toList();
+      // Get course IDs from enrollments
+      final courseIds = enrollmentsSnapshot.docs
+          .map((doc) => (doc.data() as Map<String, dynamic>)['courseId'] as String)
+          .toSet()
+          .toList();
 
-    if (courseIds.isEmpty) {
-      _courses = [];
+      if (courseIds.isEmpty) {
+        _courses = [];
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Step B: Get Courses (with offline support inside the loop)
+      List<CourseModel> allCourses = [];
+
+      for (int i = 0; i < courseIds.length; i += 10) {
+        final chunk = courseIds.skip(i).take(10).toList();
+        
+        QuerySnapshot coursesSnapshot;
+        try {
+           // Try Server
+           coursesSnapshot = await _firestore
+              .collection('courses')
+              .where('semesterId', isEqualTo: semesterId)
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get(const GetOptions(source: Source.server));
+        } catch (e) {
+           // Fallback to Cache
+           coursesSnapshot = await _firestore
+              .collection('courses')
+              .where('semesterId', isEqualTo: semesterId)
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get(const GetOptions(source: Source.cache));
+        }
+
+        final courses = coursesSnapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return CourseModel.fromJson({
+            'id': doc.id,
+            ...data,
+            'createdAt': _convertToIsoString(data['createdAt']),
+          });
+        }).toList();
+
+        allCourses.addAll(courses);
+      }
+
+      _courses = allCourses;
       _isLoading = false;
       notifyListeners();
-      return;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Error loading enrolled courses: $e');
     }
+  }
 
-    // Firestore 'in' queries are limited to 10 items
-    // Split into chunks if needed
-    List<CourseModel> allCourses = [];
-    
-    for (int i = 0; i < courseIds.length; i += 10) {
-      final chunk = courseIds.skip(i).take(10).toList();
-      
-      final coursesSnapshot = await _firestore
-          .collection('courses')
-          .where('semesterId', isEqualTo: semesterId)
-          .where(FieldPath.documentId, whereIn: chunk)
-          .get();
-
-      final courses = coursesSnapshot.docs. map((doc) {
-        final data = doc.data();
-        return CourseModel.fromJson({
-          'id': doc.id,
-          ...data,
-          'createdAt': _convertToIsoString(data['createdAt']),
-        });
-      }).toList();
-      
-      allCourses. addAll(courses);
+  String _convertToIsoString(dynamic value) {
+    if (value == null) {
+      return DateTime.now().toIso8601String();
+    } else if (value is Timestamp) {
+      return value.toDate().toIso8601String();
+    } else if (value is String) {
+      return value;
+    } else {
+      return DateTime.now().toIso8601String();
     }
-
-    _courses = allCourses;
-    _isLoading = false;
-    notifyListeners();
-  } catch (e) {
-    _error = e.toString();
-    _isLoading = false;
-    notifyListeners();
-    debugPrint('Error loading enrolled courses: $e');
   }
-}
-
-String _convertToIsoString(dynamic value) {
-  if (value == null) {
-    return DateTime.now().toIso8601String();
-  } else if (value is Timestamp) {
-    return value. toDate().toIso8601String();
-  } else if (value is String) {
-    return value;
-  } else {
-    return DateTime.now().toIso8601String();
-  }
-}
-
 
   Future<void> createCourse(CourseModel course) async {
     _isLoading = true;
@@ -152,7 +186,7 @@ String _convertToIsoString(dynamic value) {
     notifyListeners();
 
     try {
-      await _firestore. collection('courses').doc(id).update({
+      await _firestore.collection('courses').doc(id).update({
         'code': course.code,
         'name': course.name,
         'description': course.description,

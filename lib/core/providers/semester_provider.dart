@@ -25,19 +25,20 @@ class SemesterProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // ✅ FIX: Sorted by startDate so the dropdown is ordered logically
       final snapshot = await _firestore
           .collection('semesters')
-          .orderBy('startDate', descending: true)
+          .orderBy('startDate', descending: true) 
           .get();
 
       _semesters = snapshot.docs.map((doc) {
         final data = doc.data();
-        return SemesterModel. fromJson({
+        return SemesterModel.fromJson({
           'id': doc.id,
-          ... data,
-          'startDate': (data['startDate'] as Timestamp). toDate(). toIso8601String(),
+          ...data,
+          'startDate': (data['startDate'] as Timestamp).toDate().toIso8601String(),
           'endDate': (data['endDate'] as Timestamp).toDate().toIso8601String(),
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate(). toIso8601String() ??  DateTime.now().toIso8601String(),
+          'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
         });
       }).toList();
 
@@ -45,7 +46,7 @@ class SemesterProvider extends ChangeNotifier {
       if (_semesters.isNotEmpty) {
         _currentSemester = _semesters.firstWhere(
           (s) => s.isCurrent,
-          orElse: () => _semesters. first,
+          orElse: () => _semesters.first,
         );
       }
 
@@ -59,31 +60,37 @@ class SemesterProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ FIX: Uses Batch Write to ensure only ONE semester is current
   Future<void> createSemester(SemesterModel semester) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final docRef = await _firestore. collection('semesters').add({
+      final batch = _firestore.batch();
+
+      // 1. If new semester is current, mark ALL others as false first
+      if (semester.isCurrent) {
+        final allSemesters = await _firestore.collection('semesters').get();
+        for (var doc in allSemesters.docs) {
+          batch.update(doc.reference, {'isCurrent': false});
+        }
+      }
+
+      // 2. Create the new semester
+      final newDocRef = _firestore.collection('semesters').doc();
+      batch.set(newDocRef, {
         'code': semester.code,
         'name': semester.name,
         'startDate': Timestamp.fromDate(semester.startDate),
-        'endDate': Timestamp. fromDate(semester.endDate),
+        'endDate': Timestamp.fromDate(semester.endDate),
         'isCurrent': semester.isCurrent,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // If this is marked as current, unmark others
-      if (semester.isCurrent) {
-        final batch = _firestore.batch();
-        for (var s in _semesters. where((s) => s.isCurrent)) {
-          batch. update(_firestore.collection('semesters').doc(s.id), {'isCurrent': false});
-        }
-        await batch.commit();
-      }
+      await batch.commit(); // 3. Commit everything atomically
+      await loadSemesters(); // 4. Refresh local state
 
-      await loadSemesters();
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
@@ -92,30 +99,37 @@ class SemesterProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ FIX: Uses Batch Write for updates too
   Future<void> updateSemester(String id, SemesterModel semester) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      await _firestore.collection('semesters').doc(id).update({
+      final batch = _firestore.batch();
+
+      // 1. If we are setting this one to current, unset everyone else
+      if (semester.isCurrent) {
+        // We can use our local list _semesters to find IDs to update, saving a read
+        for (var s in _semesters) {
+          if (s.id != id && s.isCurrent) {
+             batch.update(_firestore.collection('semesters').doc(s.id), {'isCurrent': false});
+          }
+        }
+      }
+
+      // 2. Update the target semester
+      batch.update(_firestore.collection('semesters').doc(id), {
         'code': semester.code,
         'name': semester.name,
         'startDate': Timestamp.fromDate(semester.startDate),
-        'endDate': Timestamp. fromDate(semester.endDate),
+        'endDate': Timestamp.fromDate(semester.endDate),
         'isCurrent': semester.isCurrent,
       });
 
-      // If this is marked as current, unmark others
-      if (semester.isCurrent) {
-        final batch = _firestore.batch();
-        for (var s in _semesters.where((s) => s.isCurrent && s.id != id)) {
-          batch.update(_firestore. collection('semesters').doc(s.id), {'isCurrent': false});
-        }
-        await batch.commit();
-      }
-
+      await batch.commit();
       await loadSemesters();
+
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
@@ -130,7 +144,7 @@ class SemesterProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _firestore.collection('semesters').doc(id). delete();
+      await _firestore.collection('semesters').doc(id).delete();
       await loadSemesters();
     } catch (e) {
       _error = e.toString();

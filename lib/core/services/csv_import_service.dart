@@ -48,12 +48,11 @@ david.brown,David Brown,david.brown@student.fit.edu,20210005,Computer Science'''
 2025-1,Spring 2025,2025-01-15,2025-05-15,true''';
   }
 
-  static String generateSampleCoursesCsv() {
-    return '''code,name,description,instructorName,numberOfSessions
-INT3123,Web Programming,Advanced web development course,Dr. Smith,15
-INT3120,Mobile Development,iOS and Android development,Dr. Johnson,15
-INT3115,Database Systems,Relational and NoSQL databases,Prof. Williams,10
-INT3140,Software Engineering,Agile and DevOps practices,Dr. Brown,15''';
+static String generateSampleCoursesCsv() {
+    return '''code,name,description,instructorName,numberOfSessions,semesterCode
+INT3123,Web Programming,Advanced web development course,Dr. Smith,15,HK1-2025
+INT3120,Mobile Development,iOS and Android development,Dr. Johnson,15,HK1-2025
+INT3115,Database Systems,Relational and NoSQL databases,Prof. Williams,10,HK1-2025''';
   }
 
   static String generateSampleGroupsCsv() {

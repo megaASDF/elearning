@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/csv_import_service.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/providers/student_provider.dart';
+import '../../../core/providers/course_provider.dart';   // ✅ Added
+import '../../../core/providers/semester_provider.dart'; // ✅ Added
 
 class CsvImportScreen extends StatefulWidget {
   const CsvImportScreen({super.key});
@@ -14,13 +17,43 @@ class CsvImportScreen extends StatefulWidget {
 }
 
 class _CsvImportScreenState extends State<CsvImportScreen> {
+  final ApiService _apiService = ApiService();
+  
   String _selectedType = 'students';
+  String? _selectedSemesterId; 
+  List<dynamic> _availableSemesters = []; 
+  
   List<Map<String, dynamic>> _previewData = [];
   List<String> _importStatus = [];
   bool _isLoading = false;
   bool _showPreview = false;
   int _existingCount = 0;
   int _newCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSemesters();
+  }
+
+  Future<void> _loadSemesters() async {
+    try {
+      final semesters = await _apiService.getSemesters();
+      if (mounted) {
+        setState(() {
+          _availableSemesters = semesters;
+          try {
+            final current = semesters.firstWhere((s) => s['isCurrent'] == true);
+            _selectedSemesterId = current['id'];
+          } catch (_) {
+            if (semesters.isNotEmpty) _selectedSemesterId = semesters.first['id'];
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading semesters: $e');
+    }
+  }
 
   Future<void> _pickFile() async {
     try {
@@ -32,8 +65,8 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       if (result != null && result.files.single.bytes != null) {
         setState(() => _isLoading = true);
         
-        final csvContent = String.fromCharCodes(result. files.single.bytes!);
-        final data = await CsvImportService. parseCsv(csvContent);
+        final csvContent = String.fromCharCodes(result.files.single.bytes!);
+        final data = await CsvImportService.parseCsv(csvContent);
         
         await _validateData(data);
         
@@ -62,57 +95,174 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
     _importStatus = [];
 
     if (_selectedType == 'students') {
-      final apiService = ApiService();
-      final existingStudents = await apiService. getAllStudents();
+      final existingStudents = await _apiService.getAllStudents();
       final existingEmails = existingStudents.map((s) => s['email']).toSet();
 
       for (var row in data) {
-        final email = row['email'] ??  '';
+        final email = row['email'] ?? '';
         if (existingEmails.contains(email)) {
           _existingCount++;
-          _importStatus. add('EXISTS');
+          _importStatus.add('EXISTS');
         } else {
           _newCount++;
           _importStatus.add('NEW');
         }
       }
-    } else {
-      // For other types, assume all are new for now
+    } 
+    else if (_selectedType == 'semesters') {
+      final existingSemesters = await _apiService.getSemesters();
+      final existingCodes = existingSemesters.map((s) => s['code']).toSet();
+
+      for (var row in data) {
+        if (existingCodes.contains(row['code'])) {
+          _existingCount++;
+          _importStatus.add('EXISTS');
+        } else {
+          _newCount++;
+          _importStatus.add('NEW');
+        }
+      }
+    }
+    else if (_selectedType == 'courses') {
+      final allSemesters = await _apiService.getSemesters();
+      Map<String, Set<String>> semesterCourseCodes = {};
+
+      for (var row in data) {
+        String targetSemesterId = _selectedSemesterId ?? '';
+
+        if (row.containsKey('semesterCode') && 
+            row['semesterCode'].toString().isNotEmpty) {
+          final semCode = row['semesterCode'];
+          final foundSem = allSemesters
+              .where((s) => s['code'] == semCode)
+              .firstOrNull;
+          
+          if (foundSem != null) {
+            targetSemesterId = foundSem['id'];
+          }
+        }
+
+        if (targetSemesterId.isEmpty) {
+          _newCount++; 
+          _importStatus.add('NEW'); 
+          continue;
+        }
+
+        if (!semesterCourseCodes.containsKey(targetSemesterId)) {
+          final courses = await _apiService.getCourses(targetSemesterId);
+          semesterCourseCodes[targetSemesterId] = 
+              courses.map((c) => c['code'].toString()).toSet();
+        }
+
+        final code = row['code'] ?? '';
+        if (semesterCourseCodes[targetSemesterId]!.contains(code)) {
+          _existingCount++;
+          _importStatus.add('EXISTS');
+        } else {
+          _newCount++;
+          _importStatus.add('NEW');
+        }
+      }
+    }
+    else {
       _newCount = data.length;
       _importStatus = List.filled(data.length, 'NEW');
     }
   }
 
   Future<void> _importData() async {
+    if (_selectedType == 'courses' && _selectedSemesterId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a Target Semester first')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
-      final apiService = ApiService();
       int successCount = 0;
       int failCount = 0;
 
+      final allSemesters = await _apiService.getSemesters();
+      List<dynamic> allCourses = [];
+      
+      if (_selectedType == 'groups') {
+        for (var sem in allSemesters) {
+          final courses = await _apiService.getCourses(sem['id']);
+          allCourses.addAll(courses);
+        }
+      }
+
       for (int i = 0; i < _previewData.length; i++) {
-        if (_importStatus[i] == 'EXISTS') continue; // Skip existing
+        if (_importStatus[i] == 'EXISTS') continue; 
 
         try {
           if (_selectedType == 'students') {
-            await apiService.createStudent({
+            await _apiService.createStudent({
               'username': _previewData[i]['username'] ?? '',
               'displayName': _previewData[i]['displayName'] ?? '',
               'email': _previewData[i]['email'] ?? '',
               'studentId': _previewData[i]['studentId'] ?? '',
               'department': _previewData[i]['department'] ?? '',
             });
-          } else if (_selectedType == 'semesters') {
-            await apiService.createSemester({
+          } 
+          else if (_selectedType == 'semesters') {
+            final start = DateTime.tryParse(_previewData[i]['startDate'] ?? '') ?? DateTime.now();
+            final end = DateTime.tryParse(_previewData[i]['endDate'] ?? '') ?? DateTime.now().add(const Duration(days: 120));
+
+            await _apiService.createSemester({
               'code': _previewData[i]['code'] ?? '',
               'name': _previewData[i]['name'] ?? '',
-              'startDate': _previewData[i]['startDate'] ??  '',
-              'endDate': _previewData[i]['endDate'] ?? '',
-              'isCurrent': _previewData[i]['isCurrent'] == 'true',
+              'startDate': Timestamp.fromDate(start),
+              'endDate': Timestamp.fromDate(end),
+              'isCurrent': _previewData[i]['isCurrent'].toString().toLowerCase() == 'true',
+            });
+          } 
+          else if (_selectedType == 'courses') {
+            String targetSemesterId = _selectedSemesterId!;
+
+            if (_previewData[i].containsKey('semesterCode') && 
+                _previewData[i]['semesterCode'].toString().isNotEmpty) {
+              final semCode = _previewData[i]['semesterCode'];
+              
+              final foundSem = allSemesters
+                  .where((s) => s['code'] == semCode)
+                  .firstOrNull;
+              
+              if (foundSem != null) {
+                targetSemesterId = foundSem['id'];
+              } else {
+                throw Exception('Semester code "$semCode" not found');
+              }
+            }
+
+            await _apiService.createCourse({
+              'semesterId': targetSemesterId,
+              'code': _previewData[i]['code'] ?? '',
+              'name': _previewData[i]['name'] ?? '',
+              'description': _previewData[i]['description'] ?? '',
+              'instructorName': _previewData[i]['instructorName'] ?? 'Administrator',
+              'numberOfSessions': int.tryParse(_previewData[i]['numberOfSessions'] ?? '15') ?? 15,
             });
           }
-          // Add more types as needed
+          else if (_selectedType == 'groups') {
+            final courseCode = _previewData[i]['courseCode'];
+            
+            final course = allCourses
+                .where((c) => c['code'] == courseCode)
+                .firstOrNull;
+
+            if (course != null) {
+              await _apiService.createGroup({
+                'courseId': course['id'],
+                'name': _previewData[i]['name'] ?? 'Group',
+                'maxStudents': int.tryParse(_previewData[i]['maxStudents'] ?? '30') ?? 30,
+              });
+            } else {
+              throw Exception('Course code "$courseCode" not found');
+            }
+          }
 
           successCount++;
           setState(() {
@@ -120,6 +270,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
           });
         } catch (e) {
           failCount++;
+          debugPrint('Import row failed: $e');
           setState(() {
             _importStatus[i] = 'FAILED';
           });
@@ -129,18 +280,26 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         
-        // Refresh data
+        // ✅ FIX: REFRESH DATA AFTER IMPORT
         if (_selectedType == 'students') {
           await context.read<StudentProvider>().loadAllStudents();
+        } else if (_selectedType == 'semesters') {
+          await context.read<SemesterProvider>().loadSemesters();
+        } else if (_selectedType == 'courses' || _selectedType == 'groups') {
+          // For courses and groups, we need to refresh the CourseProvider
+          final semesterProvider = context.read<SemesterProvider>();
+          if (semesterProvider.currentSemester != null) {
+            await context.read<CourseProvider>().loadCourses(semesterProvider.currentSemester!.id);
+          }
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Import completed: $successCount success, $failCount failed, $_existingCount skipped',
+              'Import completed: $successCount success, $failCount failed',
             ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 5),
+            backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -149,8 +308,9 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Import error: $e'),
+            content: Text('Critical Error: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -171,20 +331,22 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         filename = 'sample_semesters.csv';
         break;
       case 'courses':
-        sample = CsvImportService.generateSampleCoursesCsv();
+        sample = '''code,name,description,instructorName,numberOfSessions,semesterCode
+INT3123,Mobile App Dev,Flutter course,Dr. Manh,15,HK1-2025
+INT3401,AI Basics,Intro to AI,Prof. AI,15,''';
         filename = 'sample_courses.csv';
         break;
       case 'groups':
         sample = CsvImportService.generateSampleGroupsCsv();
-        filename = 'sample_groups. csv';
+        filename = 'sample_groups.csv';
         break;
     }
 
     Clipboard.setData(ClipboardData(text: sample));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Sample CSV copied to clipboard!  Save it as $filename'),
-        backgroundColor: Colors. green,
+        content: Text('Sample CSV copied to clipboard! Save it as $filename'),
+        backgroundColor: Colors.green,
       ),
     );
   }
@@ -200,7 +362,6 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Type Selector
             DropdownButtonFormField<String>(
               value: _selectedType,
               decoration: const InputDecoration(
@@ -223,19 +384,39 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Action Buttons
+            if (_selectedType == 'courses') ...[
+              DropdownButtonFormField<String>(
+                value: _selectedSemesterId,
+                decoration: const InputDecoration(
+                  labelText: 'Target Semester (Default)',
+                  border: OutlineInputBorder(),
+                  helperText: 'Used if "semesterCode" is missing in CSV',
+                ),
+                items: _availableSemesters.map((s) {
+                  return DropdownMenuItem<String>(
+                    value: s['id'],
+                    child: Text('${s['code']} - ${s['name']}'),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() => _selectedSemesterId = value);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton. icon(
+                  child: OutlinedButton.icon(
                     onPressed: _downloadSample,
-                    icon: const Icon(Icons.download),
-                    label: const Text('Download Sample'),
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy Sample CSV'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton. icon(
+                  child: ElevatedButton.icon(
                     onPressed: _isLoading ? null : _pickFile,
                     icon: const Icon(Icons.upload_file),
                     label: const Text('Select CSV File'),
@@ -245,9 +426,8 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Preview Section
             if (_isLoading)
-              const Center(child: CircularProgressIndicator())
+              const Expanded(child: Center(child: CircularProgressIndicator()))
             else if (_showPreview) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -258,7 +438,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
                   ),
                   Chip(
                     label: Text('$_newCount new, $_existingCount existing'),
-                    backgroundColor: Colors.blue. shade100,
+                    backgroundColor: Colors.blue.shade100,
                   ),
                 ],
               ),
@@ -284,20 +464,24 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
                       } else if (status == 'SUCCESS') {
                         statusColor = Colors.green;
                         statusIcon = Icons.check_circle;
+                      } else if (status == 'NEW') {
+                        statusColor = Colors.blue;
+                        statusIcon = Icons.new_releases;
                       }
 
                       return ListTile(
                         leading: Icon(statusIcon, color: statusColor),
                         title: Text(
-                          row. values.take(3).join(' • '),
+                          row.values.take(2).join(' • '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
                           status == 'EXISTS' 
                               ? 'Already exists - will be skipped'
                               : status == 'NEW'
-                                  ? 'Will be added'
+                                  ? 'Ready to import'
                                   : status,
                           style: TextStyle(color: statusColor),
                         ),
@@ -310,12 +494,14 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
               
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton. icon(
+                child: ElevatedButton.icon(
                   onPressed: _isLoading || _newCount == 0 ? null : _importData,
                   icon: const Icon(Icons.cloud_upload),
                   label: Text('Import $_newCount New Records'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.all(16),
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
                   ),
                 ),
               ),
@@ -328,12 +514,12 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
                       Icon(Icons.file_upload, size: 64, color: Colors.grey[400]),
                       const SizedBox(height: 16),
                       Text(
-                        'Select a CSV file to import',
+                        'Select a CSV file to import $_selectedType',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Download a sample CSV to see the required format',
+                        'Use "Copy Sample CSV" to get the correct format',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
                     ],

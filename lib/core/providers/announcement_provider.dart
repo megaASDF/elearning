@@ -19,14 +19,28 @@ class AnnouncementProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final snapshot = await _firestore
-          .collection('announcements')
-          .where('courseId', isEqualTo: courseId)
-          .orderBy('createdAt', descending: true)
-          .get();
+      QuerySnapshot snapshot;
+
+      try {
+        // 1. Try Server (Timeout after 5 seconds for Web)
+        snapshot = await _firestore
+            .collection('announcements')
+            .where('courseId', isEqualTo: courseId)
+            .orderBy('createdAt', descending: true)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        // 2. Timeout or Offline -> Load from Cache
+        debugPrint('Offline/Timeout: Loading announcements from cache');
+        snapshot = await _firestore
+            .collection('announcements')
+            .where('courseId', isEqualTo: courseId)
+            .orderBy('createdAt', descending: true)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       _announcements = snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         return AnnouncementModel.fromJson({
           'id': doc.id,
           ...data,
@@ -46,38 +60,38 @@ class AnnouncementProvider extends ChangeNotifier {
     }
   }
 
-Future<void> createAnnouncement(
-  String courseId,
-  String title,
-  String content,
-  String authorName,
-  List<String> attachmentUrls,
-) async {
-  _isLoading = true;
-  _error = null;
-  notifyListeners();
-
-  try {
-    await _firestore. collection('announcements').add({
-      'courseId': courseId,
-      'title': title,
-      'content': content,
-      'authorName': authorName,
-      'attachmentUrls': attachmentUrls,
-      'groupIds': [], // All groups by default
-      'createdAt': FieldValue.serverTimestamp(),
-      'viewCount': 0,
-      'commentCount': 0,
-    });
-
-    await loadAnnouncements(courseId);
-  } catch (e) {
-    _error = e.toString();
-    _isLoading = false;
+  Future<void> createAnnouncement(
+    String courseId,
+    String title,
+    String content,
+    String authorName,
+    List<String> attachmentUrls,
+  ) async {
+    _isLoading = true;
+    _error = null;
     notifyListeners();
-    debugPrint('Error creating announcement: $e');
+
+    try {
+      await _firestore.collection('announcements').add({
+        'courseId': courseId,
+        'title': title,
+        'content': content,
+        'authorName': authorName,
+        'attachmentUrls': attachmentUrls,
+        'groupIds': [], // All groups by default
+        'createdAt': FieldValue.serverTimestamp(),
+        'viewCount': 0,
+        'commentCount': 0,
+      });
+
+      await loadAnnouncements(courseId);
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Error creating announcement: $e');
+    }
   }
-}
 
   Future<void> updateAnnouncement(
       String id, String courseId, String title, String content) async {

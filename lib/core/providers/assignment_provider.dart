@@ -4,7 +4,7 @@ import '../models/assignment_model.dart';
 
 class AssignmentProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   List<AssignmentModel> _assignments = [];
   AssignmentModel? _selectedAssignment;
   bool _isLoading = false;
@@ -21,31 +21,56 @@ class AssignmentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final snapshot = await _firestore
-          .collection('assignments')
-          .where('courseId', isEqualTo: courseId)
-          .get();
+      QuerySnapshot snapshot;
+      try {
+        // 1. Try Server (Timeout after 5 seconds)
+        snapshot = await _firestore
+            .collection('assignments')
+            .where('courseId', isEqualTo: courseId)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        // 2. Timeout or Offline -> Load from Cache
+        debugPrint('Offline/Timeout: Loading assignments from cache');
+        snapshot = await _firestore
+            .collection('assignments')
+            .where('courseId', isEqualTo: courseId)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       _assignments = snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         final now = DateTime.now();
-        
+
         return AssignmentModel.fromJson({
           'id': doc.id,
           'courseId': data['courseId'] ?? '',
           'groupIds': data['groupIds'] ?? [],
           'title': data['title'] ?? '',
-          'description': data['description'] ??  '',
+          'description': data['description'] ?? '',
           'attachments': data['attachments'] ?? [],
-          'startDate': (data['startDate'] as Timestamp?)?. toDate(). toIso8601String() ??  now.toIso8601String(),
-          'deadline': (data['deadline'] as Timestamp?)?. toDate().toIso8601String() ?? now.add(Duration(days: 7)).toIso8601String(),
-          'lateDeadline': (data['lateDeadline'] as Timestamp?)?.toDate().toIso8601String(),
+          'startDate': (data['startDate'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              now.toIso8601String(),
+          'deadline': (data['deadline'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              now.add(Duration(days: 7)).toIso8601String(),
+          'lateDeadline':
+              (data['lateDeadline'] as Timestamp?)?.toDate().toIso8601String(),
           'allowLateSubmission': data['allowLateSubmission'] ?? false,
           'maxAttempts': data['maxAttempts'] ?? 1,
           'allowedFileFormats': data['allowedFileFormats'] ?? ['pdf'],
           'maxFileSizeMB': (data['maxFileSizeMB'] ?? 10).toDouble(),
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? now. toIso8601String(),
-          'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate().toIso8601String() ?? now.toIso8601String(),
+          'createdAt': (data['createdAt'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              now.toIso8601String(),
+          'updatedAt': (data['updatedAt'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              now.toIso8601String(),
         });
       }).toList();
 
@@ -53,9 +78,6 @@ class AssignmentProvider extends ChangeNotifier {
       _assignments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       debugPrint('✅ Loaded ${_assignments.length} assignments');
-      for (var a in _assignments) {
-        debugPrint('  - ${a.title}');
-      }
 
       _isLoading = false;
       notifyListeners();
@@ -67,14 +89,15 @@ class AssignmentProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> createAssignment(String courseId, String title, String description, {String? instructions, String? maxPoints}) async {
+  Future<void> createAssignment(String courseId, String title, String description,
+      {String? instructions, String? maxPoints}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       final now = DateTime.now();
-      await _firestore. collection('assignments').add({
+      await _firestore.collection('assignments').add({
         'courseId': courseId,
         'groupIds': [],
         'title': title,
@@ -100,7 +123,9 @@ class AssignmentProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateAssignment(String id, String courseId, String title, String description, {String? instructions, String? maxPoints}) async {
+  Future<void> updateAssignment(
+      String id, String courseId, String title, String description,
+      {String? instructions, String? maxPoints}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -114,7 +139,7 @@ class AssignmentProvider extends ChangeNotifier {
 
       await loadAssignments(courseId);
     } catch (e) {
-      _error = e. toString();
+      _error = e.toString();
       _isLoading = false;
       notifyListeners();
       debugPrint('Error updating assignment: $e');
@@ -127,10 +152,10 @@ class AssignmentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _firestore. collection('assignments').doc(id). delete();
+      await _firestore.collection('assignments').doc(id).delete();
 
       final submissions = await _firestore
-          . collection('submissions')
+          .collection('submissions')
           .where('assignmentId', isEqualTo: id)
           .get();
 

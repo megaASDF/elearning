@@ -6,7 +6,7 @@ import '../models/user_model.dart';
 class StudentProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   List<UserModel> _students = [];
   bool _isLoading = false;
   String? _error;
@@ -21,17 +21,32 @@ class StudentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final snapshot = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: 'student')
-          .get();
+      QuerySnapshot snapshot;
+      try {
+        // 1. Try Server (Timeout after 5 seconds)
+        snapshot = await _firestore
+            .collection('users')
+            .where('role', isEqualTo: 'student')
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        // 2. Timeout or Offline -> Load from Cache
+        debugPrint('Offline/Timeout: Loading all students from cache');
+        snapshot = await _firestore
+            .collection('users')
+            .where('role', isEqualTo: 'student')
+            .get(const GetOptions(source: Source.cache));
+      }
 
       _students = snapshot.docs.map((doc) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         return UserModel.fromJson({
           'id': doc.id,
           ...data,
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+          'createdAt': (data['createdAt'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              DateTime.now().toIso8601String(),
         });
       }).toList();
 
@@ -51,14 +66,24 @@ class StudentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get enrolled student IDs
-      final enrollmentSnapshot = await _firestore
-          . collection('enrollments')
-          . where('courseId', isEqualTo: courseId)
-          . get();
+      // Step A: Enrollments (Timeout Enabled)
+      QuerySnapshot enrollmentSnapshot;
+      try {
+        enrollmentSnapshot = await _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: courseId)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        enrollmentSnapshot = await _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: courseId)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       final studentIds = enrollmentSnapshot.docs
-          .map((doc) => doc.data()['studentId'] as String)
+          .map((doc) =>
+              (doc.data() as Map<String, dynamic>)['studentId'] as String)
           .toSet()
           .toList();
 
@@ -69,20 +94,33 @@ class StudentProvider extends ChangeNotifier {
         return;
       }
 
-      // Get student details
-      final studentSnapshot = await _firestore
-          .collection('users')
-          .where(FieldPath.documentId, whereIn: studentIds)
-          . get();
+      // Step B: Users (Timeout Enabled)
+      QuerySnapshot studentSnapshot;
+      try {
+        studentSnapshot = await _firestore
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: studentIds)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('Offline/Timeout: Loading student profiles from cache');
+        studentSnapshot = await _firestore
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: studentIds)
+            .get(const GetOptions(source: Source.cache));
+      }
 
       _students = studentSnapshot.docs.map((doc) {
-        final data = doc. data();
-        return UserModel. fromJson({
+        final data = doc.data() as Map<String, dynamic>;
+        return UserModel.fromJson({
           'id': doc.id,
           ...data,
-          'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+          'createdAt': (data['createdAt'] as Timestamp?)
+                  ?.toDate()
+                  .toIso8601String() ??
+              DateTime.now().toIso8601String(),
         });
-      }). toList();
+      }).toList();
 
       _isLoading = false;
       notifyListeners();
@@ -100,9 +138,21 @@ class StudentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get group document
-      final groupDoc = await _firestore.collection('groups'). doc(groupId).get();
-      
+      // Step A: Group Info (Timeout Enabled)
+      DocumentSnapshot groupDoc;
+      try {
+        groupDoc = await _firestore
+            .collection('groups')
+            .doc(groupId)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        groupDoc = await _firestore
+            .collection('groups')
+            .doc(groupId)
+            .get(const GetOptions(source: Source.cache));
+      }
+
       if (!groupDoc.exists) {
         _students = [];
         _isLoading = false;
@@ -110,7 +160,10 @@ class StudentProvider extends ChangeNotifier {
         return;
       }
 
-      final studentIds = (groupDoc.data()! ['studentIds'] as List?)?.cast<String>() ?? [];
+      final studentIds =
+          ((groupDoc.data() as Map<String, dynamic>)['studentIds'] as List?)
+                  ?.cast<String>() ??
+              [];
 
       if (studentIds.isEmpty) {
         _students = [];
@@ -119,21 +172,33 @@ class StudentProvider extends ChangeNotifier {
         return;
       }
 
-      // Get student details (Firestore 'in' query has limit of 10)
+      // Step B: Batch Fetch Users (Timeout Enabled)
       _students = [];
       for (int i = 0; i < studentIds.length; i += 10) {
         final batch = studentIds.skip(i).take(10).toList();
-        final snapshot = await _firestore
-            .collection('users')
-            . where(FieldPath.documentId, whereIn: batch)
-            .get();
+        QuerySnapshot snapshot;
+        try {
+          snapshot = await _firestore
+              .collection('users')
+              .where(FieldPath.documentId, whereIn: batch)
+              .get(const GetOptions(source: Source.server))
+              .timeout(const Duration(seconds: 5));
+        } catch (e) {
+          snapshot = await _firestore
+              .collection('users')
+              .where(FieldPath.documentId, whereIn: batch)
+              .get(const GetOptions(source: Source.cache));
+        }
 
-        _students. addAll(snapshot.docs.map((doc) {
-          final data = doc.data();
+        _students.addAll(snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
           return UserModel.fromJson({
             'id': doc.id,
             ...data,
-            'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+            'createdAt': (data['createdAt'] as Timestamp?)
+                    ?.toDate()
+                    .toIso8601String() ??
+                DateTime.now().toIso8601String(),
           });
         }));
       }
@@ -148,47 +213,48 @@ class StudentProvider extends ChangeNotifier {
     }
   }
 
-Future<void> createStudent(String username, String email, String displayName, String password) async {
-  _isLoading = true;
-  _error = null;
-  notifyListeners();
-
-  try {
-    // Store current user
-    final currentUser = _auth.currentUser;
-    
-    // Create user in Firebase Auth
-    final userCred = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
-    // Create user document in Firestore
-    await _firestore.collection('users').doc(userCred.user!.uid). set({
-      'username': username,
-      'email': email,
-      'displayName': displayName,
-      'role': 'student',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    // Sign out the newly created student
-    await _auth.signOut();
-    
-    // Sign back in as the instructor (this is the workaround)
-    // You'll need to handle this in the UI by re-authenticating
-    
-    debugPrint('✅ Student created: $displayName');
-
-    await loadAllStudents();
-  } catch (e) {
-    _error = e.toString();
-    _isLoading = false;
+  Future<void> createStudent(String username, String email, String displayName,
+      String password) async {
+    _isLoading = true;
+    _error = null;
     notifyListeners();
-    debugPrint('Error creating student: $e');
-    rethrow;
+
+    try {
+      // Store current user
+      final currentUser = _auth.currentUser;
+
+      // Create user in Firebase Auth
+      final userCred = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // Create user document in Firestore
+      await _firestore.collection('users').doc(userCred.user!.uid).set({
+        'username': username,
+        'email': email,
+        'displayName': displayName,
+        'role': 'student',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Sign out the newly created student
+      await _auth.signOut();
+
+      // Sign back in as the instructor (this is the workaround)
+      // You'll need to handle this in the UI by re-authenticating
+
+      debugPrint('✅ Student created: $displayName');
+
+      await loadAllStudents();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('Error creating student: $e');
+      rethrow;
+    }
   }
-}
 
   Future<void> deleteStudent(String studentId) async {
     _isLoading = true;
@@ -198,9 +264,9 @@ Future<void> createStudent(String username, String email, String displayName, St
     try {
       // Delete enrollments
       final enrollments = await _firestore
-          . collection('enrollments')
-          . where('studentId', isEqualTo: studentId)
-          . get();
+          .collection('enrollments')
+          .where('studentId', isEqualTo: studentId)
+          .get();
 
       for (var doc in enrollments.docs) {
         await doc.reference.delete();
@@ -208,7 +274,7 @@ Future<void> createStudent(String username, String email, String displayName, St
 
       // Remove from groups
       final groups = await _firestore
-          . collection('groups')
+          .collection('groups')
           .where('studentIds', arrayContains: studentId)
           .get();
 
@@ -219,7 +285,7 @@ Future<void> createStudent(String username, String email, String displayName, St
       }
 
       // Delete user document
-      await _firestore. collection('users').doc(studentId).delete();
+      await _firestore.collection('users').doc(studentId).delete();
 
       // Note: Can't delete from Firebase Auth without being logged in as that user
       // In production, use Firebase Admin SDK on backend
