@@ -5,12 +5,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
+
+// Core imports
 import '../../../core/models/assignment_model.dart';
 import '../../../core/models/submission_model.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/submission_provider.dart';
-import '../widgets/assignment_tracking_table.dart';
 import '../../../core/services/semester_protection_service.dart';
+import '../../../core/services/connectivity_service.dart'; // ✅ Added for offline check
+
+// Widget imports
+import '../widgets/assignment_tracking_table.dart';
 
 class AssignmentDetailScreen extends StatefulWidget {
   final String assignmentId;
@@ -49,6 +54,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     }
   }
 
+  // ✅ HELPER: Handles both Timestamp (Firestore) and String (Cache) dates
+  String _parseDate(dynamic value) {
+    if (value == null) return DateTime.now().toIso8601String();
+    if (value is Timestamp) return value.toDate().toIso8601String();
+    if (value is String) return value;
+    return DateTime.now().toIso8601String();
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
@@ -61,8 +74,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
 
       if (doc.exists && mounted) {
         final data = doc.data()!;
-        final now = DateTime.now();
-
+        
         setState(() {
           _assignment = AssignmentModel.fromJson({
             'id': doc.id,
@@ -71,25 +83,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
             'title': data['title'] ?? '',
             'description': data['description'] ?? '',
             'attachments': data['attachments'] ?? [],
-            'startDate':
-                (data['startDate'] as Timestamp?)?.toDate().toIso8601String() ??
-                    now.toIso8601String(),
-            'deadline':
-                (data['deadline'] as Timestamp?)?.toDate().toIso8601String() ?? 
-                    now.add(const Duration(days: 7)).toIso8601String(),
-            'lateDeadline': (data['lateDeadline'] as Timestamp?)
-                ?.toDate()
-                .toIso8601String(),
+            'startDate': _parseDate(data['startDate']),
+            'deadline': _parseDate(data['deadline']),
+            'lateDeadline': data['lateDeadline'] != null ? _parseDate(data['lateDeadline']) : null,
             'allowLateSubmission': data['allowLateSubmission'] ?? false,
             'maxAttempts': data['maxAttempts'] ?? 1,
             'allowedFileFormats': data['allowedFileFormats'] ?? ['pdf'],
             'maxFileSizeMB': (data['maxFileSizeMB'] ?? 10).toDouble(),
-            'createdAt':
-                (data['createdAt'] as Timestamp?)?.toDate().toIso8601String() ??
-                    now.toIso8601String(),
-            'updatedAt':
-                (data['updatedAt'] as Timestamp?)?.toDate().toIso8601String() ?? 
-                    now.toIso8601String(),
+            'createdAt': _parseDate(data['createdAt']),
+            'updatedAt': _parseDate(data['updatedAt']),
           });
         });
 
@@ -97,10 +99,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         if (!widget.isInstructor) {
           final authProvider = context.read<AuthProvider>();
           final submissionProvider = context.read<SubmissionProvider>();
-          await submissionProvider.loadMySubmission(
-            widget.assignmentId,
-            authProvider.user?.id ?? '',
-          );
+          
+          if (authProvider.user != null) {
+            await submissionProvider.loadMySubmission(
+              widget.assignmentId,
+              authProvider.user!.id,
+            );
+          }
         }
       }
 
@@ -133,7 +138,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Assignment Info
+            // Assignment Info Card
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -214,31 +219,36 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
   }
 
   Widget _buildStudentView() {
+    // 1. Check Semester Protection first
     if (_isReadOnly) {
       return Card(
-        color: Colors.orange,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+        color: Colors.grey.shade200,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.all(16),
           child: Row(
-            children: const [
-              Icon(Icons.lock, color: Colors.white, size: 32),
+            children: [
+              Icon(Icons.lock, color: Colors.grey, size: 32),
               SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Past Semester - Read Only',
+                      'Semester Ended',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black87,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'This assignment is from a past semester. Submissions are disabled.',
-                      style: TextStyle(color: Colors.white),
+                      'This assignment is from a past semester. Submissions are no longer accepted.',
+                      style: TextStyle(color: Colors.black54),
                     ),
                   ],
                 ),
@@ -255,6 +265,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
+        // 2. Check if already submitted
         if (provider.mySubmission != null) {
           final submission = provider.mySubmission!;
           return Card(
@@ -301,18 +312,22 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
           );
         }
 
+        // 3. Show Submit Button
         return Column(
           children: [
             const Text('You haven\'t submitted this assignment yet.'),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              // ✅ FIXED: Wait for dialog to close, then force refresh
               onPressed: () async {
                 await _showSubmitDialog();
-                await _loadData(); // Forces the UI to reload and show 'Submitted'
+                // Refresh data to show "Submitted" state immediately after success
+                if (mounted) _loadData(); 
               },
               icon: const Icon(Icons.upload),
               label: const Text('Submit Assignment'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              ),
             ),
           ],
         );
@@ -321,6 +336,23 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
   }
 
   Future<void> _showSubmitDialog() async {
+    // ✅ Check connectivity first
+    // Note: Assuming ConnectivityService is provided in main.dart
+    try {
+      final connectivity = Provider.of<ConnectivityService>(context, listen: false);
+      if (!connectivity.isOnline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ You are offline. Please connect to the internet to submit.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    } catch (_) {
+      // Fallback if provider not found, proceed cautiously
+    }
+
     final authProvider = context.read<AuthProvider>();
     final submissionProvider = context.read<SubmissionProvider>();
 
@@ -421,8 +453,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                       uploadStatus = 'Uploading ${file.name} (${i + 1}/${selectedFiles.length})...';
                       uploadProgress = i / selectedFiles.length;
                     });
-
-                    debugPrint('📤 Starting upload: ${file.name}');
 
                     try {
                       final timestamp = DateTime.now().millisecondsSinceEpoch;

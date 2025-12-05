@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/semester_provider.dart'; // To get current semester
 import '../../../core/services/api_service.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   int _completedQuizzes = 0;
   double _averageQuizScore = 0.0;
   List<Map<String, dynamic>> _upcomingDeadlines = [];
+  List<double> _quizScores = []; // Store scores for the chart
 
   @override
   void initState() {
@@ -31,42 +34,121 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.user?.id ?? '';
+      final semesterProvider = context.read<SemesterProvider>();
+      final userId = authProvider.user?.id;
+      final currentSemesterId = semesterProvider.currentSemester?.id;
+
+      if (userId == null || currentSemesterId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
       final apiService = ApiService();
 
-      // Get all courses for current semester
-      // For now, we'll use a mock approach - you'd need to get actual enrolled courses
+      // 1. Get Enrolled Courses
+      final courses = await apiService.getEnrolledCourses(currentSemesterId, userId);
 
-      // Mock data - replace with actual API calls
+      int submitted = 0;
+      int pending = 0;
+      int late = 0;
+      int completedQuizzes = 0;
+      double totalQuizScore = 0;
+      List<Map<String, dynamic>> deadlines = [];
+      List<double> scoresForChart = [];
+
+      // 2. Iterate through courses to get Assignments and Quizzes
+      for (var course in courses) {
+        final courseId = course['id'];
+        final courseCode = course['code'];
+
+        // --- FETCH ASSIGNMENTS ---
+        final assignments = await apiService.getAssignments(courseId);
+        for (var assignment in assignments) {
+          // Check if submitted
+          final submissions = await apiService.getMySubmissions(assignment['id'], userId);
+          final isSubmitted = submissions.isNotEmpty;
+          final deadline = DateTime.tryParse(assignment['deadline'] ?? '') ?? DateTime.now().add(const Duration(days: 365));
+          
+          if (isSubmitted) {
+            submitted++;
+            // Check if it was late (simple check against submission time if available, otherwise just count as submitted)
+             if (submissions.first['submittedAt'] != null) {
+                 final submittedAt = DateTime.tryParse(submissions.first['submittedAt']) ?? DateTime.now();
+                 if (submittedAt.isAfter(deadline)) {
+                   late++;
+                 }
+             }
+          } else {
+            // Not submitted
+            if (DateTime.now().isAfter(deadline)) {
+              late++; // Missed deadline
+            } else {
+              pending++; // Future deadline
+              deadlines.add({
+                'title': assignment['title'],
+                'type': 'assignment',
+                'deadline': deadline,
+                'course': courseCode,
+              });
+            }
+          }
+        }
+
+        // --- FETCH QUIZZES ---
+        final quizzes = await apiService.getQuizzes(courseId);
+        for (var quiz in quizzes) {
+           final attempts = await apiService.getQuizAttempts(quiz['id']);
+           // Filter for THIS student's attempts
+           final myAttempts = attempts.where((a) => a['studentId'] == userId && a['submittedAt'] != null).toList();
+
+           if (myAttempts.isNotEmpty) {
+             completedQuizzes++;
+             // Use the highest score if multiple attempts
+             // Assuming score is 0-10 or 0-100. Normalize to 0-100 for chart.
+             double maxScore = 0.0;
+             for(var attempt in myAttempts) {
+               final score = (attempt['score'] ?? 0.0).toDouble();
+                if(score > maxScore) maxScore = score;
+             }
+             
+             // If your quiz scores are out of 10, multiply by 10. If 100, keep as is.
+             // Adjust this multiplier based on your grading scale!
+             // Assuming 10 is max score based on standard logic, so * 10 to get percentage.
+             double percentageScore = maxScore <= 10 ? maxScore * 10 : maxScore; 
+             
+             totalQuizScore += percentageScore;
+             scoresForChart.add(percentageScore);
+           } else {
+             // Not taken yet
+             final closeTime = DateTime.tryParse(quiz['closeTime'] ?? '') ?? DateTime.now().add(const Duration(days: 365));
+             if (DateTime.now().isBefore(closeTime)) {
+                deadlines.add({
+                'title': quiz['title'],
+                'type': 'quiz',
+                'deadline': closeTime,
+                'course': courseCode,
+              });
+             }
+           }
+        }
+      }
+
+      // Sort deadlines by date (soonest first)
+      deadlines.sort((a, b) => (a['deadline'] as DateTime).compareTo(b['deadline'] as DateTime));
+
       setState(() {
-        _submittedAssignments = 8;
-        _pendingAssignments = 3;
-        _lateAssignments = 1;
-        _completedQuizzes = 5;
-        _averageQuizScore = 85.5;
-        _upcomingDeadlines = [
-          {
-            'title': 'Assignment 3: Web Development',
-            'type': 'assignment',
-            'deadline': DateTime.now().add(const Duration(days: 2)),
-            'course': 'INT3123',
-          },
-          {
-            'title': 'Midterm Quiz',
-            'type': 'quiz',
-            'deadline': DateTime.now().add(const Duration(days: 5)),
-            'course': 'INT3120',
-          },
-          {
-            'title': 'Final Project',
-            'type': 'assignment',
-            'deadline': DateTime.now().add(const Duration(days: 14)),
-            'course': 'INT3123',
-          },
-        ];
+        _submittedAssignments = submitted;
+        _pendingAssignments = pending;
+        _lateAssignments = late;
+        _completedQuizzes = completedQuizzes;
+        _averageQuizScore = completedQuizzes > 0 ? totalQuizScore / completedQuizzes : 0.0;
+        _upcomingDeadlines = deadlines.take(5).toList(); // Show top 5
+        _quizScores = scoresForChart.take(5).toList(); // Show last 5 scores on chart
         _isLoading = false;
       });
+
     } catch (e) {
+      debugPrint('Error loading dashboard: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -119,13 +201,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           Colors.orange,
                         ),
                         _buildStatCard(
-                          'Late',
+                          'Late/Missed',
                           _lateAssignments.toString(),
                           Icons.warning,
                           Colors.red,
                         ),
                         _buildStatCard(
-                          'Quizzes',
+                          'Quizzes Done',
                           _completedQuizzes.toString(),
                           Icons.quiz,
                           Colors.blue,
@@ -135,89 +217,88 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     const SizedBox(height: 32),
 
                     // Quiz Performance Chart
-                    Text(
-                      'Quiz Performance',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Average Score'),
-                                Text(
-                                  '${_averageQuizScore.toStringAsFixed(1)}%',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              height: 200,
-                              child: BarChart(
-                                BarChartData(
-                                  alignment: BarChartAlignment.spaceAround,
-                                  maxY: 100,
-                                  barGroups: [
-                                    BarChartGroupData(x: 0, barRods: [
-                                      BarChartRodData(
-                                          toY: 90, color: Colors.blue)
-                                    ]),
-                                    BarChartGroupData(x: 1, barRods: [
-                                      BarChartRodData(
-                                          toY: 85, color: Colors.blue)
-                                    ]),
-                                    BarChartGroupData(x: 2, barRods: [
-                                      BarChartRodData(
-                                          toY: 92, color: Colors.blue)
-                                    ]),
-                                    BarChartGroupData(x: 3, barRods: [
-                                      BarChartRodData(
-                                          toY: 78, color: Colors.blue)
-                                    ]),
-                                    BarChartGroupData(x: 4, barRods: [
-                                      BarChartRodData(
-                                          toY: 82, color: Colors.blue)
-                                    ]),
-                                  ],
-                                  titlesData: FlTitlesData(
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                          showTitles: true, reservedSize: 40),
+                    if (_quizScores.isNotEmpty) ...[
+                      Text(
+                        'Recent Quiz Scores',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 16),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Average Score'),
+                                  Text(
+                                    '${_averageQuizScore.toStringAsFixed(1)}%',
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: _averageQuizScore >= 70 ? Colors.green : Colors.orange,
                                     ),
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        getTitlesWidget: (value, meta) {
-                                          return Text('Q${value.toInt() + 1}');
-                                        },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                height: 200,
+                                child: BarChart(
+                                  BarChartData(
+                                    alignment: BarChartAlignment.spaceAround,
+                                    maxY: 100,
+                                    barGroups: _quizScores.asMap().entries.map((entry) {
+                                      return BarChartGroupData(
+                                        x: entry.key,
+                                        barRods: [
+                                          BarChartRodData(
+                                            toY: entry.value,
+                                            color: entry.value >= 70 ? Colors.green : Colors.orange,
+                                            width: 16,
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                                          )
+                                        ],
+                                      );
+                                    }).toList(),
+                                    titlesData: FlTitlesData(
+                                      leftTitles: AxisTitles(
+                                        sideTitles: SideTitles(
+                                          showTitles: true, 
+                                          reservedSize: 40,
+                                          getTitlesWidget: (value, meta) => Text(value.toInt().toString()),
+                                        ),
                                       ),
+                                      bottomTitles: AxisTitles(
+                                        sideTitles: SideTitles(
+                                          showTitles: true,
+                                          getTitlesWidget: (value, meta) {
+                                            return Padding(
+                                              padding: const EdgeInsets.only(top: 8.0),
+                                              child: Text('Q${value.toInt() + 1}'),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                                     ),
-                                    topTitles: AxisTitles(
-                                        sideTitles:
-                                            SideTitles(showTitles: false)),
-                                    rightTitles: AxisTitles(
-                                        sideTitles:
-                                            SideTitles(showTitles: false)),
+                                    borderData: FlBorderData(show: false),
+                                    gridData: FlGridData(
+                                      show: true, 
+                                      drawVerticalLine: false,
+                                      horizontalInterval: 20,
+                                    ),
                                   ),
-                                  borderData: FlBorderData(show: false),
-                                  gridData: FlGridData(show: true),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 32),
+                      const SizedBox(height: 32),
+                    ],
 
                     // Upcoming Deadlines
                     Row(
@@ -227,30 +308,24 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           'Upcoming Deadlines',
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
-                        TextButton(
-                          onPressed: () {
-                            // Navigate to full calendar view
-                          },
-                          child: const Text('View All'),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     if (_upcomingDeadlines.isEmpty)
-                      const Card(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(
-                            child: Text('No upcoming deadlines'),
-                          ),
+                      Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.event_available, size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 8),
+                            Text('No upcoming deadlines!', style: TextStyle(color: Colors.grey[500])),
+                          ],
                         ),
                       )
                     else
                       ..._upcomingDeadlines.map((deadline) {
-                        final daysUntil = deadline['deadline']
-                            .difference(DateTime.now())
-                            .inDays;
-                        final isUrgent = daysUntil <= 3;
+                        final date = deadline['deadline'] as DateTime;
+                        final daysUntil = date.difference(DateTime.now()).inDays;
+                        final isUrgent = daysUntil <= 1; // Urgent if due today or tomorrow
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -258,25 +333,39 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: deadline['type'] == 'quiz'
-                                  ? Colors.blue
-                                  : Colors.green,
+                                  ? Colors.purple.shade100
+                                  : Colors.orange.shade100,
                               child: Icon(
                                 deadline['type'] == 'quiz'
                                     ? Icons.quiz
                                     : Icons.assignment,
-                                color: Colors.white,
+                                color: deadline['type'] == 'quiz'
+                                    ? Colors.purple
+                                    : Colors.orange,
                               ),
                             ),
-                            title: Text(deadline['title']),
-                            subtitle: Text(
-                              '${deadline['course']} • ${daysUntil} days remaining',
+                            title: Text(
+                              deadline['title'],
+                              maxLines: 1, 
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
+                            subtitle: Text('${deadline['course']} • ${DateFormat('MMM d, h:mm a').format(date)}'),
                             trailing: isUrgent
-                                ? const Icon(Icons.warning, color: Colors.red)
-                                : null,
+                                ? Chip(
+                                    label: const Text('Urgent', style: TextStyle(color: Colors.white, fontSize: 10)),
+                                    backgroundColor: Colors.red,
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                  )
+                                : Text(
+                                    daysUntil == 0 ? 'Today' : '$daysUntil days',
+                                    style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold),
+                                  ),
                           ),
                         );
                       }),
+                      const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -287,17 +376,26 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   Widget _buildStatCard(
       String title, String value, IconData icon, Color color) {
     return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 36, color: color),
-            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 28, color: color),
+            ),
+            const SizedBox(height: 12),
             Text(
               value,
               style: TextStyle(
-                fontSize: 28,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -305,9 +403,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             const SizedBox(height: 4),
             Text(
               title,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],

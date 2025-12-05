@@ -1,10 +1,10 @@
 # Miscellaneous
-*. class
+*.class
 *.log
 *.pyc
 *.swp
 .DS_Store
-. atom/
+.atom/
 .buildlog/
 .history
 .svn/
@@ -12,9 +12,9 @@ migrate_working_dir/
 
 # IntelliJ related
 *.iml
-*. ipr
+*.ipr
 *.iws
-. idea/
+.idea/
 
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
@@ -23,7 +23,7 @@ migrate_working_dir/
 
 # Flutter/Dart/Pub related
 **/doc/api/
-**/ios/Flutter/. last_build_id
+**/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -33,35 +33,33 @@ migrate_working_dir/
 /build/
 
 # Symbolication related
-app. *.symbols
+app.*.symbols
 
 # Obfuscation related
-app.*.map. json
+app.*.map.json
 
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
 
-# Firebase
-firebase_options.dart
+# Firebase - Secrets (KEEP IGNORED)
 google-services.json
 GoogleService-Info.plist
-. firebaserc
-firebase. json
-firestore.indexes.json
-firestore.rules
-storage.rules
+
+# Firebase - Config & Rules (Removed from ignore list so they are tracked)
+# firebase_options.dart is usually safe to commit for ease of use, 
+# but if you are very strict about exposing Project IDs, you can add it back.
 
 # Environment variables
 .env
-.env. local
-.env.*. local
+.env.local
+.env.*.local
 
 # API Keys & Secrets
 **/apikeys.dart
 **/secrets.dart
 # API Keys
 lib/core/config/api_keys.dart
-*. env
-. env
+*.env
+.env

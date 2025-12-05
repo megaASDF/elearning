@@ -25,6 +25,11 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
   int _maxAttempts = 1;
   bool _isLoading = false;
 
+  // ✅ Group Selection State
+  String? _selectedGroupId;
+  List<dynamic> _availableGroups = [];
+  bool _isLoadingGroups = true;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +42,30 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
     _openTime = widget.quiz?.openTime ?? DateTime.now();
     _closeTime = widget.quiz?.closeTime ?? DateTime.now().add(const Duration(days: 7));
     _maxAttempts = widget.quiz?.maxAttempts ?? 1;
+
+    // Initialize selected group if editing
+    if (widget.quiz != null && widget.quiz!.groupIds.isNotEmpty) {
+      _selectedGroupId = widget.quiz!.groupIds.first;
+    }
+
+    _loadGroups(); // ✅ Load groups
+  }
+
+  // ✅ Fetch Groups from API
+  Future<void> _loadGroups() async {
+    try {
+      final apiService = ApiService();
+      final groups = await apiService.getGroups(widget.courseId);
+      if (mounted) {
+        setState(() {
+          _availableGroups = groups;
+          _isLoadingGroups = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading groups: $e');
+      if (mounted) setState(() => _isLoadingGroups = false);
+    }
   }
 
   @override
@@ -59,7 +88,8 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
       final apiService = ApiService();
       final data = {
         'courseId': widget.courseId,
-        'groupIds': [],
+        // ✅ Send selected group ID (or empty list for All Students)
+        'groupIds': _selectedGroupId != null ? [_selectedGroupId] : [],
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'openTime': _openTime.toIso8601String(),
@@ -69,7 +99,7 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
         'easyQuestions': int.parse(_easyController.text),
         'mediumQuestions': int.parse(_mediumController.text),
         'hardQuestions': int.parse(_hardController.text),
-        'questionIds': [],
+        'questionIds': [], // Logic for specific IDs can be added later
       };
 
       if (widget.quiz != null) {
@@ -101,7 +131,7 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 800), // Increased height slightly
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
@@ -117,6 +147,7 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TextFormField(
                         controller: _titleController,
@@ -133,6 +164,33 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
                         enabled: !_isLoading,
                       ),
                       const SizedBox(height: 16),
+
+                      // ✅ Group Selection Dropdown
+                      _isLoadingGroups
+                          ? const Center(child: LinearProgressIndicator())
+                          : DropdownButtonFormField<String>(
+                              value: _selectedGroupId,
+                              decoration: const InputDecoration(
+                                labelText: 'Assign to Group',
+                                border: OutlineInputBorder(),
+                                helperText: 'Leave empty for All Students',
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: null,
+                                  child: Text('All Students (Default)'),
+                                ),
+                                ..._availableGroups.map((group) {
+                                  return DropdownMenuItem<String>(
+                                    value: group['id'],
+                                    child: Text(group['name']),
+                                  );
+                                }),
+                              ],
+                              onChanged: _isLoading ? null : (val) => setState(() => _selectedGroupId = val),
+                            ),
+                      const SizedBox(height: 16),
+
                       Row(
                         children: [
                           Expanded(
@@ -145,12 +203,14 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
                                   lastDate: DateTime(2030),
                                 );
                                 if (picked != null) {
-                                  final time = await showTimePicker(
-                                    context: context,
-                                    initialTime: TimeOfDay.fromDateTime(_openTime),
-                                  );
-                                  if (time != null) {
-                                    setState(() => _openTime = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute));
+                                  if (context.mounted) {
+                                    final time = await showTimePicker(
+                                      context: context,
+                                      initialTime: TimeOfDay.fromDateTime(_openTime),
+                                    );
+                                    if (time != null) {
+                                      setState(() => _openTime = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute));
+                                    }
                                   }
                                 }
                               },
@@ -171,12 +231,14 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
                                   lastDate: DateTime(2030),
                                 );
                                 if (picked != null) {
-                                  final time = await showTimePicker(
-                                    context: context,
-                                    initialTime: TimeOfDay.fromDateTime(_closeTime),
-                                  );
-                                  if (time != null) {
-                                    setState(() => _closeTime = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute));
+                                  if (context.mounted) {
+                                    final time = await showTimePicker(
+                                      context: context,
+                                      initialTime: TimeOfDay.fromDateTime(_closeTime),
+                                    );
+                                    if (time != null) {
+                                      setState(() => _closeTime = DateTime(picked.year, picked.month, picked.day, time.hour, time.minute));
+                                    }
                                   }
                                 }
                               },
@@ -212,7 +274,7 @@ class _QuizFormDialogState extends State<QuizFormDialog> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      const Text('Question Structure', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text('Question Structure (Auto-generated)', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Row(
                         children: [
