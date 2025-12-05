@@ -133,7 +133,7 @@ class SubmissionProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> submitAssignment(
+Future<void> submitAssignment(
     String assignmentId,
     String studentId,
     String studentName,
@@ -144,6 +144,51 @@ class SubmissionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 🛑 STEP 1: VALIDATION CHECK
+      // Fetch the assignment details to check the deadline
+      final assignmentDoc = await _firestore
+          .collection('assignments')
+          .doc(assignmentId)
+          .get();
+
+      if (!assignmentDoc.exists) {
+        throw Exception("Assignment not found");
+      }
+
+      final data = assignmentDoc.data() as Map<String, dynamic>;
+      final now = DateTime.now();
+      
+      // Parse dates safeley
+      final deadline = (data['deadline'] as Timestamp).toDate();
+      final allowLateSubmission = data['allowLateSubmission'] ?? false;
+      
+      DateTime? lateDeadline;
+      if (data['lateDeadline'] != null) {
+        lateDeadline = (data['lateDeadline'] as Timestamp).toDate();
+      }
+
+      // 🛑 STEP 2: COMPARE DATES
+      // Logic: Is it past the normal deadline?
+      if (now.isAfter(deadline)) {
+        
+        // If late submissions are NOT allowed -> BLOCK IT
+        if (!allowLateSubmission) {
+           throw Exception("The deadline for this assignment has passed.");
+        }
+
+        // If late submissions ARE allowed, but it's past the LATE deadline -> BLOCK IT
+        if (lateDeadline != null && now.isAfter(lateDeadline)) {
+           throw Exception("The late submission deadline has passed.");
+        }
+      }
+
+      // Determine status (submitted vs late)
+      String submissionStatus = 'submitted';
+      if (now.isAfter(deadline)) {
+        submissionStatus = 'late';
+      }
+
+      // ✅ STEP 3: PROCEED IF VALID
       await _firestore.collection('submissions').add({
         'assignmentId': assignmentId,
         'studentId': studentId,
@@ -152,16 +197,12 @@ class SubmissionProvider extends ChangeNotifier {
         'submittedAt': FieldValue.serverTimestamp(),
         'grade': null,
         'feedback': null,
-        'status': 'submitted',
+        'status': submissionStatus, // 'submitted' or 'late'
         'attemptNumber': 1,
       });
 
-      // Get assignment title
-      final assignmentDoc = await _firestore
-          .collection('assignments')
-          .doc(assignmentId)
-          .get();
-      final assignmentTitle = assignmentDoc.data()?['title'] ?? 'Assignment';
+      // Get assignment title for notification
+      final assignmentTitle = data['title'] ?? 'Assignment';
 
       // Send confirmation notification
       final notificationService = NotificationService();
@@ -177,6 +218,9 @@ class SubmissionProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       debugPrint('Error submitting assignment: $e');
+      
+      // Rethrow so the UI knows to show the Red SnackBar
+      rethrow; 
     }
   }
 

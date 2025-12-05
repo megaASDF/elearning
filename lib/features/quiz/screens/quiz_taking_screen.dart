@@ -89,29 +89,49 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
     return '${minutes.toString(). padLeft(2, '0')}:${secs.toString(). padLeft(2, '0')}';
   }
 
-  Future<void> _submitQuiz() async {
+Future<void> _submitQuiz() async {
     if (_isSubmitting) return;
 
     setState(() => _isSubmitting = true);
-    _timer?. cancel();
+    _timer?.cancel();
 
     try {
       final authProvider = context.read<AuthProvider>();
       final apiService = ApiService();
 
+      // 🛑 SAFETY CHECK: Validate Dates before calculating score 🛑
+      final quizDoc = await FirebaseFirestore.instance
+          .collection('quizzes')
+          .doc(widget.quizId)
+          .get();
+
+      if (!quizDoc.exists) throw Exception("Quiz not found");
+      
+      final quizData = quizDoc.data()!;
+      final now = DateTime.now();
+
+      // Check Deadline
+      if (quizData['deadline'] != null) {
+        final deadline = (quizData['deadline'] as Timestamp).toDate();
+        if (now.isAfter(deadline)) {
+          throw Exception("The submission deadline for this quiz has passed.");
+        }
+      }
+
       // Calculate score
       int correctCount = 0;
       for (var entry in _selectedAnswers.entries) {
         final questionIndex = int.parse(entry.key);
-        final selectedAnswer = entry. value;
+        final selectedAnswer = entry.value;
         final correctAnswer = _questions[questionIndex]['correctAnswer'];
-        
+
         if (selectedAnswer == correctAnswer) {
           correctCount++;
         }
       }
 
-      final score = (_questions.isEmpty ? 0.0 : (correctCount / _questions.length) * 100);
+      final score =
+          (_questions.isEmpty ? 0.0 : (correctCount / _questions.length) * 100);
 
       // Start attempt
       final attempt = await apiService.startQuizAttempt(
@@ -125,12 +145,12 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
         attempt['id'],
         _selectedAnswers,
       );
-      
+
       // Update score
-      await FirebaseFirestore. instance
+      await FirebaseFirestore.instance
           .collection('quizAttempts')
-          . doc(attempt['id'])
-          . update({'score': score});
+          .doc(attempt['id'])
+          .update({'score': score});
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -150,10 +170,12 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
       debugPrint('Error submitting quiz: $e');
       if (mounted) {
         setState(() => _isSubmitting = false);
+        // Show the error to the user (e.g., "Deadline passed")
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error submitting quiz: $e'),
+            content: Text('Error: ${e.toString().replaceAll("Exception: ", "")}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

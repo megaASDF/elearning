@@ -15,7 +15,8 @@ class AssignmentProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  Future<void> loadAssignments(String courseId) async {
+  // UPDATED: Now accepts optional studentId for group filtering
+  Future<void> loadAssignments(String courseId, {String? studentId}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -38,7 +39,7 @@ class AssignmentProvider extends ChangeNotifier {
             .get(const GetOptions(source: Source.cache));
       }
 
-      _assignments = snapshot.docs.map((doc) {
+      var loadedAssignments = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         final now = DateTime.now();
 
@@ -56,7 +57,7 @@ class AssignmentProvider extends ChangeNotifier {
           'deadline': (data['deadline'] as Timestamp?)
                   ?.toDate()
                   .toIso8601String() ??
-              now.add(Duration(days: 7)).toIso8601String(),
+              now.add(const Duration(days: 7)).toIso8601String(),
           'lateDeadline':
               (data['lateDeadline'] as Timestamp?)?.toDate().toIso8601String(),
           'allowLateSubmission': data['allowLateSubmission'] ?? false,
@@ -73,6 +74,40 @@ class AssignmentProvider extends ChangeNotifier {
               now.toIso8601String(),
         });
       }).toList();
+
+      // 🛑 GROUP FILTERING LOGIC 🛑
+      if (studentId != null) {
+        // A. Find student's group in this course
+        // We use cache here because this data rarely changes during a session
+        final enrollmentQuery = await _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: courseId)
+            .where('studentId', isEqualTo: studentId)
+            .get(const GetOptions(source: Source.cache)); // Prefer cache
+
+        String? myGroupId;
+        if (enrollmentQuery.docs.isNotEmpty) {
+          final data = enrollmentQuery.docs.first.data();
+          if (data is Map && data.containsKey('groupId')) {
+             myGroupId = data['groupId'];
+          }
+        }
+
+        // B. Filter the list
+        loadedAssignments = loadedAssignments.where((assignment) {
+          // 1. If groupIds is empty/null, it's for EVERYONE
+          if (assignment.groupIds.isEmpty) {
+            return true;
+          }
+          // 2. If student has no group, they only see public ones
+          if (myGroupId == null) return false;
+
+          // 3. Check if assignment is for the student's group
+          return assignment.groupIds.contains(myGroupId);
+        }).toList();
+      }
+
+      _assignments = loadedAssignments;
 
       // Sort in memory
       _assignments.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -99,12 +134,12 @@ class AssignmentProvider extends ChangeNotifier {
       final now = DateTime.now();
       await _firestore.collection('assignments').add({
         'courseId': courseId,
-        'groupIds': [],
+        'groupIds': [], // Default to everyone
         'title': title,
         'description': description,
         'attachments': [],
         'startDate': Timestamp.fromDate(now),
-        'deadline': Timestamp.fromDate(now.add(Duration(days: 7))),
+        'deadline': Timestamp.fromDate(now.add(const Duration(days: 7))),
         'lateDeadline': null,
         'allowLateSubmission': false,
         'maxAttempts': 1,
