@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Added to recognize Timestamp
 
 class OfflineDatabaseService {
   static const String _coursesBox = 'courses_cache';
@@ -18,7 +19,7 @@ class OfflineDatabaseService {
     // Open all boxes
     await Hive.openBox(_coursesBox);
     await Hive.openBox(_assignmentsBox);
-    await Hive. openBox(_submissionsBox);
+    await Hive.openBox(_submissionsBox);
     await Hive.openBox(_quizzesBox);
     await Hive.openBox(_materialsBox);
     await Hive.openBox(_announcementsBox);
@@ -28,11 +29,30 @@ class OfflineDatabaseService {
     debugPrint('✅ Offline database initialized');
   }
 
+  // ✅ HELPER: Converts Timestamps to Strings before saving
+  static dynamic _sanitizeData(dynamic data) {
+    if (data is Timestamp) {
+      return data.toDate().toIso8601String();
+    } else if (data is Map) {
+      // Create a new map to avoid modifying the original readonly map
+      final Map<String, dynamic> newMap = {};
+      data.forEach((key, value) {
+        newMap[key.toString()] = _sanitizeData(value);
+      });
+      return newMap;
+    } else if (data is List) {
+      return data.map((item) => _sanitizeData(item)).toList();
+    }
+    return data;
+  }
+
   // --- COURSES ---
   static Future<void> saveCourses(String semesterId, List<dynamic> courses) async {
     try {
       final box = Hive.box(_coursesBox);
-      await box.put(semesterId, courses);
+      // ✅ Sanitize before saving
+      final cleanCourses = _sanitizeData(courses);
+      await box.put(semesterId, cleanCourses);
       debugPrint('💾 Saved ${courses.length} courses to offline cache');
     } catch (e) {
       debugPrint('❌ Error saving courses offline: $e');
@@ -41,7 +61,7 @@ class OfflineDatabaseService {
 
   static List<dynamic>? getCourses(String semesterId) {
     try {
-      final box = Hive. box(_coursesBox);
+      final box = Hive.box(_coursesBox);
       final data = box.get(semesterId);
       if (data != null) {
         debugPrint('📂 Loaded ${(data as List).length} courses from offline cache');
@@ -56,15 +76,13 @@ class OfflineDatabaseService {
 
   static Future<void> clearCourseData(String courseId) async {
     try {
-      // Clear all data related to a specific course
-      final coursesBox = Hive.box(_coursesBox);
-      final assignmentsBox = Hive. box(_assignmentsBox);
-      final quizzesBox = Hive. box(_quizzesBox);
+      final assignmentsBox = Hive.box(_assignmentsBox);
+      final quizzesBox = Hive.box(_quizzesBox);
       final materialsBox = Hive.box(_materialsBox);
       
       await assignmentsBox.delete(courseId);
       await quizzesBox.delete(courseId);
-      await materialsBox. delete(courseId);
+      await materialsBox.delete(courseId);
       
       debugPrint('🗑️ Cleared offline data for course: $courseId');
     } catch (e) {
@@ -76,7 +94,9 @@ class OfflineDatabaseService {
   static Future<void> saveAssignments(String courseId, List<dynamic> assignments) async {
     try {
       final box = Hive.box(_assignmentsBox);
-      await box.put(courseId, assignments);
+      // ✅ Sanitize before saving
+      final cleanAssignments = _sanitizeData(assignments);
+      await box.put(courseId, cleanAssignments);
       debugPrint('💾 Saved ${assignments.length} assignments to offline cache');
     } catch (e) {
       debugPrint('❌ Error saving assignments offline: $e');
@@ -88,7 +108,7 @@ class OfflineDatabaseService {
       final box = Hive.box(_assignmentsBox);
       final data = box.get(courseId);
       if (data != null) {
-        debugPrint('📂 Loaded ${(data as List). length} assignments from offline cache');
+        debugPrint('📂 Loaded ${(data as List).length} assignments from offline cache');
         return List<dynamic>.from(data);
       }
       return null;
@@ -101,15 +121,17 @@ class OfflineDatabaseService {
   // --- SUBMISSIONS ---
   static Future<void> saveSubmissions(String assignmentId, List<dynamic> submissions) async {
     try {
-      final box = Hive. box(_submissionsBox);
-      await box.put(assignmentId, submissions);
+      final box = Hive.box(_submissionsBox);
+      // ✅ Sanitize before saving
+      final cleanSubmissions = _sanitizeData(submissions);
+      await box.put(assignmentId, cleanSubmissions);
       debugPrint('💾 Saved ${submissions.length} submissions to offline cache');
     } catch (e) {
       debugPrint('❌ Error saving submissions offline: $e');
     }
   }
 
-  static List<dynamic>?  getSubmissions(String assignmentId) {
+  static List<dynamic>? getSubmissions(String assignmentId) {
     try {
       final box = Hive.box(_submissionsBox);
       final data = box.get(assignmentId);
@@ -128,8 +150,10 @@ class OfflineDatabaseService {
   static Future<void> saveQuizzes(String courseId, List<dynamic> quizzes) async {
     try {
       final box = Hive.box(_quizzesBox);
-      await box.put(courseId, quizzes);
-      debugPrint('💾 Saved ${quizzes. length} quizzes to offline cache');
+      // ✅ Sanitize before saving
+      final cleanQuizzes = _sanitizeData(quizzes);
+      await box.put(courseId, cleanQuizzes);
+      debugPrint('💾 Saved ${quizzes.length} quizzes to offline cache');
     } catch (e) {
       debugPrint('❌ Error saving quizzes offline: $e');
     }
@@ -149,12 +173,14 @@ class OfflineDatabaseService {
       return null;
     }
   }
-
+  
   // --- MATERIALS ---
   static Future<void> saveMaterials(String courseId, List<dynamic> materials) async {
     try {
       final box = Hive.box(_materialsBox);
-      await box.put(courseId, materials);
+      // ✅ Sanitize before saving
+      final cleanMaterials = _sanitizeData(materials);
+      await box.put(courseId, cleanMaterials);
       debugPrint('💾 Saved ${materials.length} materials to offline cache');
     } catch (e) {
       debugPrint('❌ Error saving materials offline: $e');
@@ -163,7 +189,7 @@ class OfflineDatabaseService {
 
   static List<dynamic>? getMaterials(String courseId) {
     try {
-      final box = Hive. box(_materialsBox);
+      final box = Hive.box(_materialsBox);
       final data = box.get(courseId);
       if (data != null) {
         debugPrint('📂 Loaded ${(data as List).length} materials from offline cache');
@@ -180,7 +206,9 @@ class OfflineDatabaseService {
   static Future<void> saveAnnouncements(String courseId, List<dynamic> announcements) async {
     try {
       final box = Hive.box(_announcementsBox);
-      await box.put(courseId, announcements);
+      // ✅ Sanitize before saving
+      final cleanAnnouncements = _sanitizeData(announcements);
+      await box.put(courseId, cleanAnnouncements);
       debugPrint('💾 Saved ${announcements.length} announcements to offline cache');
     } catch (e) {
       debugPrint('❌ Error saving announcements offline: $e');
@@ -202,12 +230,15 @@ class OfflineDatabaseService {
     }
   }
 
-  // --- PENDING ACTIONS (for sync when back online) ---
+  // --- PENDING ACTIONS ---
   static Future<void> savePendingAction(Map<String, dynamic> action) async {
     try {
       final box = Hive.box(_pendingActionsBox);
       final actions = box.get('actions', defaultValue: <dynamic>[]) as List;
-      actions.add(action);
+      
+      // ✅ Sanitize action data just in case
+      actions.add(_sanitizeData(action));
+      
       await box.put('actions', actions);
       debugPrint('⏳ Saved pending action: ${action['type']}');
     } catch (e) {

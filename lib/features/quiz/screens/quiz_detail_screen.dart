@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // <--- Need Provider
 import '../../../core/models/quiz_model.dart';
 import '../../../core/models/quiz_attempt_model.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/providers/auth_provider.dart'; // <--- Import AuthProvider
 import 'quiz_taking_screen.dart';
 
 class QuizDetailScreen extends StatefulWidget {
@@ -31,34 +33,44 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
     _loadData();
   }
 
-Future<void> _loadData() async {
-  setState(() => _isLoading = true);
-  try {
-    final apiService = ApiService();
-    
-    // Get quiz directly by ID
-    final quizData = await apiService.getQuizById(widget.quizId);
-    
-    if (quizData != null) {
-      _quiz = QuizModel. fromJson(quizData);
-    }
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final apiService = ApiService();
+      final authProvider = context.read<AuthProvider>(); // Get current user
 
-    // Get attempts
-    final attemptsData = await apiService.getQuizAttempts(widget.quizId);
+      // Get quiz directly by ID
+      final quizData = await apiService.getQuizById(widget.quizId);
 
-    if (mounted) {
-      setState(() {
-        _attempts = attemptsData
-            . map((json) => QuizAttemptModel.fromJson(json))
-            .toList();
-        _isLoading = false;
-      });
+      if (quizData != null) {
+        _quiz = QuizModel.fromJson(quizData);
+      }
+
+      // Get attempts
+      final attemptsData = await apiService.getQuizAttempts(widget.quizId);
+      final allAttempts = attemptsData
+          .map((json) => QuizAttemptModel.fromJson(json))
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          // ✅ FIX: Filter attempts
+          if (widget.isInstructor) {
+            _attempts = allAttempts; // Instructors see everything
+          } else {
+            // Students only see their own attempts
+            _attempts = allAttempts
+                .where((a) => a.studentId == authProvider.user?.id)
+                .toList();
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading quiz details: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e) {
-    debugPrint('Error loading quiz details: $e');
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   void _startQuiz() {
     if (_quiz == null) return;
@@ -68,7 +80,6 @@ Future<void> _loadData() async {
       MaterialPageRoute(
         builder: (context) => QuizTakingScreen(
           quizId: widget.quizId,
-          
           quizTitle: _quiz!.title,
           durationMinutes: _quiz!.durationMinutes,
         ),
@@ -78,6 +89,22 @@ Future<void> _loadData() async {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ FIX: Check Expiration
+    bool isExpired = false;
+    bool isNotStarted = false;
+    final now = DateTime.now();
+
+    if (_quiz != null) {
+      isExpired = now.isAfter(_quiz!.closeTime);
+      isNotStarted = now.isBefore(_quiz!.openTime);
+    }
+
+    // Determine Button State
+    bool canStart = !isExpired && !isNotStarted;
+    String buttonText = 'Start Quiz';
+    if (isExpired) buttonText = 'Quiz Closed';
+    if (isNotStarted) buttonText = 'Not Started Yet';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Quiz Details')),
       body: _isLoading
@@ -137,10 +164,14 @@ Future<void> _loadData() async {
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  const Icon(Icons.event_busy, size: 20),
+                                  Icon(Icons.event_busy, size: 20, color: isExpired ? Colors.red : null),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Close: ${_quiz!.closeTime.day}/${_quiz!.closeTime.month}/${_quiz!.closeTime.year}',
+                                    style: TextStyle(
+                                      color: isExpired ? Colors.red : null,
+                                      fontWeight: isExpired ? FontWeight.bold : null,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -155,13 +186,16 @@ Future<void> _loadData() async {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: _startQuiz,
+                            // ✅ FIX: Disable button if expired
+                            onPressed: canStart ? _startQuiz : null,
                             icon: const Icon(Icons.play_arrow),
-                            label: const Text('Start Quiz'),
+                            label: Text(buttonText),
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.all(16),
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey, // Grey out when disabled
+                              disabledForegroundColor: Colors.white70,
                             ),
                           ),
                         ),

@@ -1,57 +1,40 @@
 import 'package:flutter/material.dart';
-import '../../../core/models/forum_topic_model.dart';
-import '../../../core/services/api_service.dart';
+import 'package:provider/provider.dart';
+import '../../../core/providers/auth_provider.dart'; // Import AuthProvider
+import '../../../core/providers/forum_provider.dart'; // Import ForumProvider
 import '../widgets/forum_topic_form_dialog.dart';
 import 'forum_topic_detail_screen.dart';
 
 class ForumScreen extends StatefulWidget {
   final String courseId;
 
-  const ForumScreen({super. key, required this.courseId});
+  const ForumScreen({super.key, required this.courseId});
 
   @override
   State<ForumScreen> createState() => _ForumScreenState();
 }
 
 class _ForumScreenState extends State<ForumScreen> {
-  List<ForumTopicModel> _topics = [];
-  bool _isLoading = true;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _loadTopics();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTopics();
+    });
   }
 
   Future<void> _loadTopics() async {
-    setState(() => _isLoading = true);
-    try {
-      final apiService = ApiService();
-      final data = await apiService.getForumTopics(widget.courseId);
-      if (mounted) {
-        setState(() {
-          _topics = data. map((json) => ForumTopicModel. fromJson(json)).toList();
-          _isLoading = false;
-        });
-      }
-    } catch (e, stackTrace) {
-      debugPrint('🔥🔥🔥 FORUM ERROR 🔥🔥🔥');
-      debugPrint('Error loading forum topics: $e');
-      debugPrint('Stack trace: $stackTrace');
-      debugPrint('🔥🔥🔥 END ERROR 🔥🔥🔥\n');
-      
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 10),
-          ),
-        );
-      }
-    }
+    // 🛑 UPDATED LOGIC HERE 🛑
+    final provider = context.read<ForumProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final user = authProvider.user;
+
+    await provider.loadTopics(
+      widget.courseId,
+      studentId: user?.role == 'student' ? user?.id : null,
+    );
   }
 
   Future<void> _showTopicDialog() async {
@@ -65,13 +48,9 @@ class _ForumScreenState extends State<ForumScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredTopics = _topics
-        .where((t) => t.title.toLowerCase(). contains(_searchQuery.toLowerCase()))
-        .toList();
-
     return Scaffold(
       appBar: AppBar(title: const Text('Course Forum')),
-      floatingActionButton: FloatingActionButton. extended(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _showTopicDialog,
         icon: const Icon(Icons.add),
         label: const Text('New Topic'),
@@ -82,7 +61,7 @@ class _ForumScreenState extends State<ForumScreen> {
             padding: const EdgeInsets.all(16),
             child: TextField(
               decoration: InputDecoration(
-                hintText: 'Search topics.. .',
+                hintText: 'Search topics...',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -90,105 +69,122 @@ class _ForumScreenState extends State<ForumScreen> {
             ),
           ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredTopics.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.forum, size: 64, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No topics yet',
-                              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text('Start a discussion! '),
-                          ],
+            child: Consumer<ForumProvider>(
+              builder: (context, provider, child) {
+                if (provider.isLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                // Filter locally by search query
+                final filteredTopics = provider.topics
+                    .where((t) => t.title
+                        .toLowerCase()
+                        .contains(_searchQuery.toLowerCase()))
+                    .toList();
+
+                if (filteredTopics.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.forum, size: 64, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(
+                          _searchQuery.isEmpty
+                              ? 'No topics yet'
+                              : 'No topics found',
+                          style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadTopics,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: filteredTopics.length,
-                          itemBuilder: (context, index) {
-                            final topic = filteredTopics[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  child: Text(topic.authorName[0]. toUpperCase()),
-                                ),
-                                title: Text(
-                                  topic.title,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      topic.content,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '${topic.authorName} • ',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.chat_bubble_outline,
-                                          size: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                        Text(
-                                          ' ${topic.replyCount}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Icon(
-                                          Icons.visibility,
-                                          size: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                        Text(
-                                          ' ${topic.viewCount}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                isThreeLine: true,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ForumTopicDetailScreen(
-                                        topicId: topic.id,
-                                      ),
-                                    ),
-                                  ). then((_) => _loadTopics());
-                                },
+                        const SizedBox(height: 8),
+                        const Text('Start a discussion!'),
+                      ],
+                    ),
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: _loadTopics,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filteredTopics.length,
+                    itemBuilder: (context, index) {
+                      final topic = filteredTopics[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child: Text(topic.authorName[0].toUpperCase()),
+                          ),
+                          title: Text(
+                            topic.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(
+                                topic.content,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            );
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Text(
+                                    '${topic.authorName} • ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chat_bubble_outline,
+                                    size: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  Text(
+                                    ' ${topic.replyCount}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    Icons.visibility,
+                                    size: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  Text(
+                                    ' ${topic.viewCount}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ForumTopicDetailScreen(
+                                  topicId: topic.id,
+                                ),
+                              ),
+                            ).then((_) => _loadTopics());
                           },
                         ),
-                      ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

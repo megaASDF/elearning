@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/forum_provider.dart'; // <--- Import ForumProvider
 import '../../../core/services/api_service.dart';
 
 class ForumTopicFormDialog extends StatefulWidget {
@@ -38,7 +39,7 @@ class _ForumTopicFormDialogState extends State<ForumTopicFormDialog> {
       final groupsData = await apiService.getGroups(widget.courseId);
       if (mounted) {
         setState(() {
-          _groups = groupsData. cast<Map<String, dynamic>>();
+          _groups = groupsData.cast<Map<String, dynamic>>();
         });
       }
     } catch (e) {
@@ -48,38 +49,37 @@ class _ForumTopicFormDialogState extends State<ForumTopicFormDialog> {
 
   Future<void> _submit() async {
     if (_titleController.text.trim().isEmpty ||
-        _contentController.text. trim().isEmpty) {
+        _contentController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
       );
       return;
     }
 
-    if (_selectedGroupIds.isEmpty) {
-      ScaffoldMessenger. of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one group')),
-      );
-      return;
-    }
+    // Note: It is valid to have NO groups selected (Open to everyone)
+    // If you want to force selection, keep your check. 
+    // Usually, empty groups means "Public/All Class".
 
     setState(() => _isLoading = true);
 
     try {
       final authProvider = context.read<AuthProvider>();
+      final forumProvider = context.read<ForumProvider>(); // <--- Use Provider
       final user = authProvider.user;
 
       if (user == null) {
         throw Exception('User not logged in');
       }
 
-      await ApiService().createForumTopic({
-        'courseId': widget.courseId,
-        'title': _titleController. text.trim(),
-        'content': _contentController.text.trim(),
-        'authorId': user.id,
-        'authorName': user.displayName,
-        'groupIds': _selectedGroupIds,
-      });
+      // ✅ FIX: Use ForumProvider to create topic
+      await forumProvider.createTopic(
+        widget.courseId,
+        _titleController.text.trim(),
+        _contentController.text.trim(),
+        user.id,
+        user.displayName,
+        _selectedGroupIds,
+      );
 
       if (mounted) {
         Navigator.pop(context, true);
@@ -104,7 +104,7 @@ class _ForumTopicFormDialogState extends State<ForumTopicFormDialog> {
       title: const Text('Create Discussion Topic'),
       content: SingleChildScrollView(
         child: SizedBox(
-          width: MediaQuery.of(context).size. width * 0.8,
+          width: MediaQuery.of(context).size.width * 0.8,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,7 +115,7 @@ class _ForumTopicFormDialogState extends State<ForumTopicFormDialog> {
                   labelText: 'Title',
                   border: OutlineInputBorder(),
                 ),
-                enabled: ! _isLoading,
+                enabled: !_isLoading,
               ),
               const SizedBox(height: 16),
               TextField(
@@ -130,8 +130,8 @@ class _ForumTopicFormDialogState extends State<ForumTopicFormDialog> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Select Groups',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                'Select Groups (Optional - Select none for Everyone)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
               const SizedBox(height: 8),
               if (_groups.isEmpty)
@@ -141,7 +141,7 @@ class _ForumTopicFormDialogState extends State<ForumTopicFormDialog> {
                   final groupId = group['id'] as String;
                   final groupName = group['name'] as String;
                   return CheckboxListTile(
-                    value: _selectedGroupIds. contains(groupId),
+                    value: _selectedGroupIds.contains(groupId),
                     onChanged: _isLoading
                         ? null
                         : (checked) {

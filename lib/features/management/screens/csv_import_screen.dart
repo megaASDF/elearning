@@ -3,11 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Services
 import '../../../core/services/csv_import_service.dart';
 import '../../../core/services/api_service.dart';
+
+// Providers
 import '../../../core/providers/student_provider.dart';
-import '../../../core/providers/course_provider.dart';   // ✅ Added
-import '../../../core/providers/semester_provider.dart'; // ✅ Added
+import '../../../core/providers/course_provider.dart';
+import '../../../core/providers/semester_provider.dart';
+import '../../../core/providers/group_provider.dart'; // Added for completeness
 
 class CsvImportScreen extends StatefulWidget {
   const CsvImportScreen({super.key});
@@ -43,9 +48,11 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         setState(() {
           _availableSemesters = semesters;
           try {
+            // Try to set current semester as default
             final current = semesters.firstWhere((s) => s['isCurrent'] == true);
             _selectedSemesterId = current['id'];
           } catch (_) {
+            // Fallback to first available
             if (semesters.isNotEmpty) _selectedSemesterId = semesters.first['id'];
           }
         });
@@ -60,11 +67,13 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
+        withData: true, // Ensure bytes are loaded
       );
 
       if (result != null && result.files.single.bytes != null) {
         setState(() => _isLoading = true);
         
+        // Decode bytes to string
         final csvContent = String.fromCharCodes(result.files.single.bytes!);
         final data = await CsvImportService.parseCsv(csvContent);
         
@@ -130,6 +139,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       for (var row in data) {
         String targetSemesterId = _selectedSemesterId ?? '';
 
+        // Check if CSV specifies a semester
         if (row.containsKey('semesterCode') && 
             row['semesterCode'].toString().isNotEmpty) {
           final semCode = row['semesterCode'];
@@ -148,6 +158,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
           continue;
         }
 
+        // Cache course codes for this semester if not already cached
         if (!semesterCourseCodes.containsKey(targetSemesterId)) {
           final courses = await _apiService.getCourses(targetSemesterId);
           semesterCourseCodes[targetSemesterId] = 
@@ -165,6 +176,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       }
     }
     else {
+      // Default for Groups or others without specific pre-validation logic
       _newCount = data.length;
       _importStatus = List.filled(data.length, 'NEW');
     }
@@ -187,6 +199,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       final allSemesters = await _apiService.getSemesters();
       List<dynamic> allCourses = [];
       
+      // Pre-fetch courses if we are importing groups
       if (_selectedType == 'groups') {
         for (var sem in allSemesters) {
           final courses = await _apiService.getCourses(sem['id']);
@@ -280,13 +293,13 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         
-        // ✅ FIX: REFRESH DATA AFTER IMPORT
+        // REFRESH PROVIDERS BASED ON IMPORT TYPE
         if (_selectedType == 'students') {
           await context.read<StudentProvider>().loadAllStudents();
         } else if (_selectedType == 'semesters') {
           await context.read<SemesterProvider>().loadSemesters();
         } else if (_selectedType == 'courses' || _selectedType == 'groups') {
-          // For courses and groups, we need to refresh the CourseProvider
+          // For courses and groups, refresh current semester data if active
           final semesterProvider = context.read<SemesterProvider>();
           if (semesterProvider.currentSemester != null) {
             await context.read<CourseProvider>().loadCourses(semesterProvider.currentSemester!.id);
@@ -331,6 +344,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         filename = 'sample_semesters.csv';
         break;
       case 'courses':
+        // Updated sample to include optional semesterCode
         sample = '''code,name,description,instructorName,numberOfSessions,semesterCode
 INT3123,Mobile App Dev,Flutter course,Dr. Manh,15,HK1-2025
 INT3401,AI Basics,Intro to AI,Prof. AI,15,''';
@@ -379,6 +393,7 @@ INT3401,AI Basics,Intro to AI,Prof. AI,15,''';
                   _selectedType = value!;
                   _showPreview = false;
                   _previewData = [];
+                  _importStatus = [];
                 });
               },
             ),
@@ -450,10 +465,11 @@ INT3401,AI Basics,Intro to AI,Prof. AI,15,''';
                     itemCount: _previewData.length,
                     itemBuilder: (context, index) {
                       final row = _previewData[index];
-                      final status = _importStatus[index];
+                      // Use safe access for status in case index is out of bounds
+                      final status = index < _importStatus.length ? _importStatus[index] : 'UNKNOWN';
                       
-                      Color statusColor = Colors.green;
-                      IconData statusIcon = Icons.add_circle;
+                      Color statusColor = Colors.grey;
+                      IconData statusIcon = Icons.help;
                       
                       if (status == 'EXISTS') {
                         statusColor = Colors.orange;

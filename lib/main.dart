@@ -1,21 +1,27 @@
 import 'package:elearning_app/core/providers/submission_provider.dart';
 import 'package:elearning_app/core/services/offline_database_service.dart';
 import 'package:elearning_app/test_storage.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+
+// Router
 import 'core/router/app_router.dart';
+
+// Providers
 import 'core/providers/auth_provider.dart';
 import 'core/providers/semester_provider.dart';
 import 'core/providers/course_provider.dart';
 import 'core/providers/group_provider.dart';
 import 'core/providers/student_provider.dart';
-import 'core/providers/assignment_provider.dart'; // ADD
-import 'core/providers/material_provider.dart'; // ADD
-import 'core/providers/announcement_provider.dart'; // ADD
+import 'core/providers/assignment_provider.dart';
+import 'core/providers/material_provider.dart';
+import 'core/providers/announcement_provider.dart';
+import 'core/providers/forum_provider.dart';
+
+// Services
 import 'core/services/notification_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'package:elearning_app/core/services/sync_service.dart';
@@ -31,26 +37,28 @@ void main() async {
     debugPrint('Stack trace: ${details.stack}');
     debugPrint(' END ERROR \n');
   };
+
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-FirebaseFirestore.instance.settings = const Settings(
+  
+  FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
-  // TEST FIREBASE STORAGE
-  await testFirebaseStorage();
 
-  // Initialize Offline Database (ADD THIS)
+
+  // Initialize Offline Database
   await OfflineDatabaseService.initialize();
 
-  // Initialize Sync Service (ADD THIS)
+  // Initialize Sync Service
   final syncService = SyncService();
   syncService.startListening((isOnline) {
     debugPrint(
-        isOnline ? '✅ Back online - syncing.. .' : '⚠️ Offline mode active');
+        isOnline ? '✅ Back online - syncing...' : '⚠️ Offline mode active');
   });
+
   // Initialize default semester if none exists
   await _initializeDefaultData();
 
@@ -99,11 +107,15 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CourseProvider()),
         ChangeNotifierProvider(create: (_) => GroupProvider()),
         ChangeNotifierProvider(create: (_) => StudentProvider()),
-        ChangeNotifierProvider(create: (_) => AssignmentProvider()), // ADD
-        ChangeNotifierProvider(create: (_) => MaterialProvider()), // ADD
+        ChangeNotifierProvider(create: (_) => AssignmentProvider()),
+        ChangeNotifierProvider(create: (_) => MaterialProvider()),
         ChangeNotifierProvider(create: (_) => AnnouncementProvider()),
-        ChangeNotifierProvider(create: (_) => SubmissionProvider()), // ADD
-        ChangeNotifierProvider.value(value: ConnectivityService.instance),
+        ChangeNotifierProvider(create: (_) => SubmissionProvider()),
+        ChangeNotifierProvider(create: (_) => ForumProvider()),
+        
+        // FIX: Changed from .value to create to avoid "child required" error
+        // This assumes ConnectivityService.instance is a singleton that extends ChangeNotifier
+        ChangeNotifierProvider(create: (_) => ConnectivityService.instance),
       ],
       child: Consumer<AuthProvider>(
         builder: (context, authProvider, _) {

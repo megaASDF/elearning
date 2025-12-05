@@ -11,7 +11,7 @@ class StreamTab extends StatefulWidget {
   final bool isInstructor;
 
   const StreamTab({
-    super. key,
+    super.key,
     required this.courseId,
     required this.isInstructor,
   });
@@ -31,7 +31,14 @@ class _StreamTabState extends State<StreamTab> {
 
   Future<void> _loadAnnouncements() async {
     final provider = context.read<AnnouncementProvider>();
-    await provider.loadAnnouncements(widget.courseId);
+    final authProvider = context.read<AuthProvider>();
+    final user = authProvider.user;
+
+    // 🛑 UPDATED LOGIC HERE 🛑
+    await provider.loadAnnouncements(
+      widget.courseId,
+      studentId: user?.role == 'student' ? user?.id : null
+    );
   }
 
   Future<void> _showAnnouncementDialog() async {
@@ -48,7 +55,7 @@ class _StreamTabState extends State<StreamTab> {
     }
   }
 
-@override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Consumer<AnnouncementProvider>(
@@ -57,10 +64,10 @@ class _StreamTabState extends State<StreamTab> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (provider.announcements. isEmpty) {
+          if (provider.announcements.isEmpty) {
             return Center(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment. center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.announcement_outlined, size: 64, color: Colors.grey[400]),
                   const SizedBox(height: 16),
@@ -70,7 +77,7 @@ class _StreamTabState extends State<StreamTab> {
                   ),
                   if (widget.isInstructor) ...[
                     const SizedBox(height: 16),
-                    ElevatedButton. icon(
+                    ElevatedButton.icon(
                       onPressed: _showAnnouncementDialog,
                       icon: const Icon(Icons.add),
                       label: const Text('Create Announcement'),
@@ -81,7 +88,7 @@ class _StreamTabState extends State<StreamTab> {
             );
           }
 
-return RefreshIndicator(
+          return RefreshIndicator(
             onRefresh: _loadAnnouncements,
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -96,9 +103,9 @@ return RefreshIndicator(
         },
       ),
       floatingActionButton: widget.isInstructor
-          ? FloatingActionButton. extended(
+          ? FloatingActionButton.extended(
               onPressed: _showAnnouncementDialog,
-              icon: const Icon(Icons. add),
+              icon: const Icon(Icons.add),
               label: const Text('Announcement'),
             )
           : null,

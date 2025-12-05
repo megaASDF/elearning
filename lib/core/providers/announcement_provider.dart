@@ -13,7 +13,8 @@ class AnnouncementProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  Future<void> loadAnnouncements(String courseId) async {
+  // ✅ UPDATED: Now accepts optional studentId for group filtering
+  Future<void> loadAnnouncements(String courseId, {String? studentId}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -39,7 +40,7 @@ class AnnouncementProvider extends ChangeNotifier {
             .get(const GetOptions(source: Source.cache));
       }
 
-      _announcements = snapshot.docs.map((doc) {
+      var loadedAnnouncements = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         return AnnouncementModel.fromJson({
           'id': doc.id,
@@ -50,6 +51,38 @@ class AnnouncementProvider extends ChangeNotifier {
         });
       }).toList();
 
+      // 🛑 GROUP FILTERING LOGIC 🛑
+      if (studentId != null) {
+        // A. Find student's group in this course
+        final enrollmentQuery = await _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: courseId)
+            .where('studentId', isEqualTo: studentId)
+            .get(const GetOptions(source: Source.cache));
+
+        String? myGroupId;
+        if (enrollmentQuery.docs.isNotEmpty) {
+          final data = enrollmentQuery.docs.first.data();
+          if (data.containsKey('groupId')) {
+            myGroupId = data['groupId'];
+          }
+        }
+
+        // B. Filter the list
+        loadedAnnouncements = loadedAnnouncements.where((announcement) {
+          // 1. If groupIds is empty/null, it is for EVERYONE
+          if (announcement.groupIds == null || announcement.groupIds!.isEmpty) {
+            return true;
+          }
+          // 2. If student has no group, they only see public ones
+          if (myGroupId == null) return false;
+
+          // 3. Check if announcement is for the student's group
+          return announcement.groupIds!.contains(myGroupId);
+        }).toList();
+      }
+
+      _announcements = loadedAnnouncements;
       _isLoading = false;
       notifyListeners();
     } catch (e) {

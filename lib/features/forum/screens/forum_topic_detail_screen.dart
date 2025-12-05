@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/models/forum_topic_model.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/forum_provider.dart';
 import '../../../core/services/api_service.dart';
 
 class ForumTopicDetailScreen extends StatefulWidget {
   final String topicId;
 
-  const ForumTopicDetailScreen({super. key, required this.topicId});
+  const ForumTopicDetailScreen({super.key, required this.topicId});
 
   @override
   State<ForumTopicDetailScreen> createState() => _ForumTopicDetailScreenState();
@@ -15,14 +17,15 @@ class ForumTopicDetailScreen extends StatefulWidget {
 
 class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
   ForumTopicModel? _topic;
-  List<Map<String, dynamic>> _replies = [];
   bool _isLoading = true;
   final _replyController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   @override
@@ -35,18 +38,52 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
     setState(() => _isLoading = true);
     try {
       final apiService = ApiService();
-      
-      // Increment view count
-      await apiService. incrementForumTopicView(widget.topicId);
-      
-      // Get topic
-      final topicData = await apiService.getForumTopicById(widget.topicId);
-      if (topicData != null) {
-        _topic = ForumTopicModel.fromJson(topicData);
+      final forumProvider = context.read<ForumProvider>();
+
+      // 1. Increment View Count (Fire and forget)
+      try {
+        apiService.incrementForumTopicView(widget.topicId);
+      } catch (_) {}
+
+      // 2. Load Topic Details (With Offline Support)
+      try {
+        // Try Server
+        final doc = await FirebaseFirestore.instance
+            .collection('forum_topics')
+            .doc(widget.topicId)
+            .get(const GetOptions(source: Source.server))
+            .timeout(const Duration(seconds: 5));
+            
+        if (doc.exists) {
+          final data = doc.data()!;
+          _topic = ForumTopicModel.fromJson({
+            'id': doc.id,
+            ...data,
+            'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String(),
+            'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate().toIso8601String(),
+          });
+        }
+      } catch (e) {
+        // Fallback to Cache
+        debugPrint('Offline: Loading topic detail from cache');
+        final doc = await FirebaseFirestore.instance
+            .collection('forum_topics')
+            .doc(widget.topicId)
+            .get(const GetOptions(source: Source.cache));
+
+        if (doc.exists) {
+          final data = doc.data()!;
+          _topic = ForumTopicModel.fromJson({
+            'id': doc.id,
+            ...data,
+            'createdAt': (data['createdAt'] as Timestamp?)?.toDate().toIso8601String(),
+            'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate().toIso8601String(),
+          });
+        }
       }
-      
-      // Get replies
-      _replies = await apiService.getForumReplies(widget.topicId);
+
+      // 3. Load Replies via Provider
+      await forumProvider.loadReplies(widget.topicId);
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -64,27 +101,27 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
+      final forumProvider = context.read<ForumProvider>();
       final user = authProvider.user;
-      
+
       if (user == null) {
-        ScaffoldMessenger.of(context). showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('You must be logged in to reply')),
         );
         return;
       }
 
-      await ApiService().createForumReply({
-        'topicId': widget.topicId,
-        'content': _replyController.text.trim(),
-        'authorId': user.id,
-        'authorName': user.displayName,
-      });
+      await forumProvider.createReply(
+        widget.topicId,
+        _replyController.text.trim(),
+        user.id,
+        user.displayName,
+      );
 
-      _replyController. clear();
-      _loadData();
+      _replyController.clear();
       
       if (mounted) {
-        ScaffoldMessenger. of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reply posted successfully'),
             backgroundColor: Colors.green,
@@ -104,10 +141,24 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
     }
   }
 
+  // Helper to safely format any date
+  String _formatDate(dynamic date) {
+    if (date == null) return '';
+    DateTime dt;
+    if (date is DateTime) {
+      dt = date;
+    } else if (date is String) {
+      dt = DateTime.tryParse(date) ?? DateTime.now();
+    } else {
+      return '';
+    }
+    return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final currentUserId = authProvider.user?.id ??  '';
+    final currentUserId = authProvider.user?.id ?? '';
 
     if (_isLoading) {
       return const Scaffold(
@@ -147,8 +198,8 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
                               children: [
                                 CircleAvatar(
                                   child: Text(
-                                    _topic!. authorName. isNotEmpty
-                                        ? _topic!. authorName[0].toUpperCase()
+                                    _topic!.authorName.isNotEmpty
+                                        ? _topic!.authorName[0].toUpperCase()
                                         : 'U',
                                   ),
                                 ),
@@ -164,9 +215,7 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
                                         ),
                                       ),
                                       Text(
-                                        DateTime.parse(_topic!.createdAt)
-                                            .toString()
-                                            .substring(0, 16),
+                                        _formatDate(_topic!.createdAt), // Topic uses String
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey[600],
@@ -179,7 +228,7 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              _topic! .title,
+                              _topic!.title,
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const SizedBox(height: 8),
@@ -188,11 +237,15 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
                             Row(
                               children: [
                                 Icon(Icons.chat_bubble_outline,
-                                    size: 16, color: Colors. grey[600]),
+                                    size: 16, color: Colors.grey[600]),
                                 const SizedBox(width: 4),
-                                Text(
-                                  '${_topic!.replyCount} replies',
-                                  style: TextStyle(color: Colors.grey[600]),
+                                Consumer<ForumProvider>(
+                                  builder: (context, provider, _) {
+                                    return Text(
+                                      '${provider.replies.length} replies',
+                                      style: TextStyle(color: Colors.grey[600]),
+                                    );
+                                  }
                                 ),
                                 const SizedBox(width: 16),
                                 Icon(Icons.visibility,
@@ -211,106 +264,114 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
                     const SizedBox(height: 24),
 
                     // Replies Section
-                    Text(
-                      'Replies (${_replies.length})',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 16),
-
-                    if (_replies.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Text('No replies yet. Be the first to reply!'),
-                        ),
-                      )
-                    else
-                      ..._replies.map((reply) {
-                        final isCurrentUser = reply['authorId'] == currentUserId;
-                        final authorName = reply['authorName'] ?? 'Anonymous';
+                    Consumer<ForumProvider>(
+                      builder: (context, provider, child) {
+                        final replies = provider.replies;
                         
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          color: isCurrentUser ? Colors.blue. shade50 : null,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: isCurrentUser 
-                                          ? Colors.blue 
-                                          : Colors.grey,
-                                      child: Text(
-                                        authorName. isNotEmpty
-                                            ?  authorName[0].toUpperCase()
-                                            : 'U',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Text(
-                                                authorName,
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Replies (${replies.length})',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 16),
+
+                            if (replies.isEmpty)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child: Text('No replies yet. Be the first to reply!'),
+                                ),
+                              )
+                            else
+                              ...replies.map((reply) {
+                                final isCurrentUser = reply.authorId == currentUserId;
+                                
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  color: isCurrentUser ? Colors.blue.shade50 : null,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 16,
+                                              backgroundColor: isCurrentUser 
+                                                  ? Colors.blue 
+                                                  : Colors.grey,
+                                              child: Text(
+                                                reply.authorName.isNotEmpty
+                                                    ? reply.authorName[0].toUpperCase()
+                                                    : 'U',
                                                 style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                  fontSize: 14,
                                                 ),
                                               ),
-                                              if (isCurrentUser) ...[
-                                                const SizedBox(width: 8),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        reply.authorName,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      if (isCurrentUser) ...[
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.blue,
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: const Text(
+                                                            'You',
+                                                            style: TextStyle(
+                                                              color: Colors.white,
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
                                                   ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.blue,
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: const Text(
-                                                    'You',
+                                                  Text(
+                                                    _formatDate(reply.createdAt), // Reply uses DateTime
                                                     style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
                                                     ),
                                                   ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                          Text(
-                                            DateTime.parse(reply['createdAt'])
-                                                .toString()
-                                                .substring(0, 16),
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[600],
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(reply.content),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(reply['content'] ?? ''),
-                              ],
-                            ),
-                          ),
+                                  ),
+                                );
+                              }),
+                          ],
                         );
-                      }),
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -324,7 +385,7 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
               color: Colors.grey[100],
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black. withValues(alpha: 0.05),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -341,7 +402,7 @@ class _ForumTopicDetailScreenState extends State<ForumTopicDetailScreen> {
                       fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide. none,
+                        borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,

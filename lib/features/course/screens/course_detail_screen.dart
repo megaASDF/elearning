@@ -37,25 +37,45 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
   }
 
   Future<void> _loadCourseDetails() async {
+    // Basic null safety check
+    if (!mounted) return;
+    
     setState(() => _isLoading = true);
     try {
       final apiService = ApiService();
       final data = await apiService.getCourseDetails(widget.courseId);
-      setState(() {
-        _course = CourseModel.fromJson(data);
-        _isLoading = false;
-      });
+      
+      if (mounted) {
+        setState(() {
+          _course = CourseModel.fromJson(data);
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      debugPrint('Error loading course details: $e');
     }
+  }
+
+  void _openAiAssistant() {
+    if (_course == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AIChatbotScreen(
+          courseId: widget.courseId,
+          courseName: _course!.name,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_course == null) {
@@ -65,9 +85,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       );
     }
 
-    // Get user role from auth provider
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final isInstructor = authProvider.user?.role == 'instructor';
+    // Get user role safely
+    final authProvider = Provider.of<AuthProvider>(context);
+    final user = authProvider.user;
+    final isInstructor = user?.role == 'instructor';
 
     return Scaffold(
       body: NestedScrollView(
@@ -76,6 +97,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
             SliverAppBar(
               expandedHeight: 200,
               pinned: true,
+              actions: [
+                // ✅ AI BUTTON IN APP BAR
+                // This is safe. It creates an icon in the top-right corner.
+                // It will NEVER block the bottom-right "Create" buttons.
+                IconButton(
+                  onPressed: _openAiAssistant,
+                  icon: const Icon(Icons.smart_toy_outlined, color: Colors.white),
+                  tooltip: 'AI Assistant',
+                ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 titlePadding: const EdgeInsets.only(left: 56, bottom: 16),
                 title: Text(
@@ -92,12 +123,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Colors.primaries[
-                            _course!.code.hashCode % Colors.primaries.length],
-                        Colors
-                            .primaries[_course!.code.hashCode %
-                                Colors.primaries.length]
-                            .shade700,
+                        Colors.primaries[_course!.code.hashCode % Colors.primaries.length],
+                        Colors.primaries[_course!.code.hashCode % Colors.primaries.length].shade700,
                       ],
                     ),
                   ),
@@ -150,21 +177,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
           ],
         ),
       ),
-      // ✅ CHANGED: Only show AI Assistant if NOT instructor
+      
+      // ✅ ONLY SHOW FLOATING BUTTON FOR STUDENTS
+      // If isInstructor is true, we pass null. 
+      // This tells the Scaffold "I don't have a button, let the children (Tabs) handle their own buttons."
       floatingActionButton: isInstructor
-          ? null
+          ? null 
           : FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AIChatbotScreen(
-                      courseId: widget.courseId,
-                      courseName: _course!.name,
-                    ),
-                  ),
-                );
-              },
+              onPressed: _openAiAssistant,
               icon: const Icon(Icons.smart_toy),
               label: const Text('AI Assistant'),
               backgroundColor: Colors.purple,
